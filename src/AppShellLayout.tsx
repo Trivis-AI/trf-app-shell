@@ -208,19 +208,20 @@ function SidebarBrand({
   );
 }
 
-// Mobile-only top bar: hamburger + breadcrumb (org › app › active section). Sticky,
-// respects the top safe-area.
+// Mobile-only top bar: breadcrumb (org › app › active section) on the left, menu
+// toggle on the right. The hamburger is positioned/sized to match the open drawer's
+// close (X) exactly, so it reads as one button flipping ☰ ⇄ ✕. Sticky, top safe-area.
 function MobileTopBar({ orgName, appLabel, section }: { orgName: string | null; appLabel: string; section: string | null }) {
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   return (
-    <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-card px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
-      <SidebarMobileTrigger />
+    <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-card px-2 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] md:hidden">
       <Logo size={22} className="shrink-0" />
       <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
         {orgName && (<><span className="min-w-0 truncate font-medium">{orgName}</span><Sep /></>)}
         <span className="shrink-0 text-muted-foreground">{appLabel}</span>
         {section && (<><Sep /><span className="min-w-0 truncate font-medium">{section}</span></>)}
       </div>
+      <SidebarMobileTrigger className="size-10 shrink-0 [&_svg]:size-6" />
     </div>
   );
 }
