@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
   Files, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
-  Plus, LogOut, ChevronsUpDown, Check, Globe,
+  Plus, LogOut, ChevronsUpDown, ChevronRight, Check, Globe,
 } from "lucide-react";
 import {
   AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
@@ -201,13 +201,19 @@ function SidebarBrand({
   );
 }
 
-// Mobile-only top bar: the menu hamburger + brand. Sticky, respects the top safe-area.
-function MobileTopBar({ appLabel }: { appLabel: string }) {
+// Mobile-only top bar: hamburger + breadcrumb (org › app › active section). Sticky,
+// respects the top safe-area.
+function MobileTopBar({ orgName, appLabel, section }: { orgName: string | null; appLabel: string; section: string | null }) {
+  const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   return (
     <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-card px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:hidden">
       <SidebarMobileTrigger />
       <Logo size={22} className="shrink-0" />
-      <Text as="span" size="sm" weight="semibold" className="truncate">{appLabel}</Text>
+      <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+        {orgName && (<><span className="min-w-0 truncate font-medium">{orgName}</span><Sep /></>)}
+        <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+        {section && (<><Sep /><span className="min-w-0 truncate font-medium">{section}</span></>)}
+      </div>
     </div>
   );
 }
@@ -438,6 +444,19 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return ids;
   };
 
+  // Label of the deepest active leaf (the current "section", e.g. "Chat") — for the breadcrumb.
+  const activeSectionLabel = (nodes: MenuItem[]): string | null => {
+    for (const n of nodes) {
+      if (n.children?.length) {
+        const sub = activeSectionLabel(n.children);
+        if (sub) return sub;
+      } else if (isActive(n)) {
+        return label(n);
+      }
+    }
+    return null;
+  };
+
   // Auto-open the active route's group(s) once the menu has loaded / the route changes.
   useEffect(() => {
     const active = activeGroupIds(items);
@@ -516,7 +535,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // The mobile top bar (md:hidden) sits above the routed content inside the inset.
   return (
     <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-      <MobileTopBar appLabel={appLabel} />
+      <MobileTopBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} />
       {children}
     </AppShell>
   );
