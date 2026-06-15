@@ -4,13 +4,15 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
   Files, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
-  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X,
+  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search,
 } from "lucide-react";
 import {
   AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
   SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarTrigger, useSidebar,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
-  Button, Avatar, Text, cn,
+  Dialog, DialogContent, DialogTitle,
+  Command, CommandInput, CommandList, CommandEmpty, CommandItem,
+  Button, Input, Avatar, Text, cn,
 } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
@@ -58,6 +60,101 @@ export interface AppShellLayoutProps {
 }
 
 interface OrgOption { id: string; name: string; slug: string }
+
+/* ── Menu search ──────────────────────────────────────────────────────────
+ * Flattens the discovery menu to navigable leaves and matches a query against
+ * each leaf's label + every localized label + (future) BE `keywords`. Lowercase
+ * + diacritic-strip so "muuk" finds "Müük". Keyword-ready today: read via the
+ * local `Searchable` cast so when the BE/@trf/ui add `keywords` it just works. */
+type Searchable = MenuItem & { keywords?: string[] };
+
+interface SearchLeaf {
+  item: MenuItem;
+  href?: string;
+  internal: boolean;
+  /** Ancestor group labels, e.g. ["Müük", "Arved"]. */
+  trail: string[];
+  /** Normalized haystack: label + labels[*] + keywords. */
+  hay: string;
+}
+
+const normalize = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const queryTokens = (q: string) => normalize(q).split(/\s+/).filter(Boolean);
+
+const matchesQuery = (hay: string, q: string) => {
+  const tokens = queryTokens(q);
+  return tokens.length > 0 && tokens.every((t) => hay.includes(t));
+};
+
+/** Bold the matched spans of `text` for a given query (cosmetic; length-preserving). */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const tokens = queryTokens(query);
+  if (!tokens.length) return <>{text}</>;
+  const chars = Array.from(text);
+  // Per-code-point normalize, forced to one char, so indices map back to `chars`.
+  const norm = chars
+    .map((c) => {
+      const n = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      return n ? n[0] : (c.toLowerCase()[0] ?? c);
+    })
+    .join("");
+  const ranges: [number, number][] = [];
+  for (const tk of tokens) {
+    let from = 0, idx: number;
+    while ((idx = norm.indexOf(tk, from)) !== -1) {
+      ranges.push([idx, idx + tk.length]);
+      from = idx + tk.length;
+    }
+  }
+  if (!ranges.length) return <>{text}</>;
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [s, e] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+  const parts: React.ReactNode[] = [];
+  let cur = 0;
+  merged.forEach(([s, e], i) => {
+    if (s > cur) parts.push(chars.slice(cur, s).join(""));
+    parts.push(<mark key={i} className="bg-transparent font-semibold text-foreground">{chars.slice(s, e).join("")}</mark>);
+    cur = e;
+  });
+  if (cur < chars.length) parts.push(chars.slice(cur).join(""));
+  return <>{parts}</>;
+}
+
+/** Inline filter box at the top of the menu. Hidden on the collapsed desktop rail. */
+function MenuSearchBox({ query, setQuery }: { query: string; setQuery: (v: string) => void }) {
+  const { collapsed } = useSidebar();
+  if (collapsed) return null;
+  return (
+    <div className="relative px-2 pb-1 max-md:px-1">
+      <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground max-md:left-3" />
+      <Input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search…"
+        aria-label="Search menu"
+        className="h-9 pl-9 pr-8 max-md:h-11 max-md:text-base [&::-webkit-search-cancel-button]:appearance-none"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => setQuery("")}
+          aria-label="Clear search"
+          className="absolute right-4 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground max-md:right-3"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -421,6 +518,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>(readThemeChoice);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
+  const [query, setQuery] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const orgName = useMemo(() => orgNameFromCookie(slug), [slug]);
   const lang = translation.getLang();
   const portalBase = loginUrl ?? defaultLoginUrl();
@@ -552,6 +651,52 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     else window.location.href = href;
   };
 
+  // Navigate to a leaf from search, then clear the query / close the palette so the
+  // tree (with the now-active row) is shown next time the menu opens.
+  const goFromSearch = (item: MenuItem) => {
+    setQuery("");
+    setPaletteOpen(false);
+    go(item);
+  };
+
+  // Flatten the discovery menu to navigable leaves once per menu/locale change.
+  const searchLeaves = useMemo<SearchLeaf[]>(() => {
+    const out: SearchLeaf[] = [];
+    const walk = (nodes: MenuItem[], trail: string[]) => {
+      for (const n of nodes) {
+        const lbl = label(n);
+        if (n.children?.length) {
+          walk(n.children, [...trail, lbl]);
+          continue;
+        }
+        const labels = n.labels ? Object.values(n.labels) : [];
+        const keywords = (n as Searchable).keywords ?? [];
+        const hay = normalize([n.label, lbl, ...labels, ...keywords].join(" "));
+        out.push({ item: n, ...resolve(n), trail, hay });
+      }
+    };
+    walk(items, []);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, baseUrls, slug, lang]);
+
+  const results = useMemo(
+    () => searchLeaves.filter((l) => matchesQuery(l.hay, query)),
+    [searchLeaves, query],
+  );
+
+  // ⌘K / Ctrl-K toggles the command palette anywhere (also works on the collapsed rail).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Recursive nav node: a group (with children) recurses into SidebarMenuSub; a leaf
   // navigates. Only top-level rows carry a domain icon (matches the existing look).
   const renderNode = (item: MenuItem, top: boolean): React.ReactNode => {
@@ -601,9 +746,39 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
         <SidebarBrand orgName={orgName} appLabel={appLabel} {...orgProps} />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarMenu>
-          {items.map((item) => renderNode(item, true))}
-        </SidebarMenu>
+        <MenuSearchBox query={query} setQuery={setQuery} />
+        {query.trim() ? (
+          <SidebarMenu>
+            {results.length === 0 ? (
+              <Text className="px-3 py-2 text-sm text-muted-foreground">No matches</Text>
+            ) : (
+              results.map((leaf) => (
+                <SidebarMenuItem key={leaf.item.id}>
+                  <SidebarMenuButton
+                    tooltip={label(leaf.item)}
+                    isActive={isActive(leaf.item)}
+                    onClick={() => goFromSearch(leaf.item)}
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">
+                        <Highlight text={label(leaf.item)} query={query} />
+                      </span>
+                      {leaf.trail.length > 0 && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {leaf.trail.join(" › ")}
+                        </span>
+                      )}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))
+            )}
+          </SidebarMenu>
+        ) : (
+          <SidebarMenu>
+            {items.map((item) => renderNode(item, true))}
+          </SidebarMenu>
+        )}
       </SidebarContent>
       <SidebarFooter className="max-md:min-h-14 max-md:justify-around max-md:px-3">
         <LanguageSelect translation={translation} />
@@ -617,9 +792,34 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // Each page owns its own content container (chat fills height; others center).
   // The mobile top bar (md:hidden) sits above the routed content inside the inset.
   return (
-    <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-      <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} scrollHide {...orgProps} />
-      {children}
-    </AppShell>
+    <>
+      <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
+        <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} scrollHide {...orgProps} />
+        {children}
+      </AppShell>
+
+      {/* ⌘K command palette — shares the same flatten/match core as the inline box. */}
+      <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
+        <DialogContent className="overflow-hidden p-0 sm:max-w-lg">
+          <DialogTitle className="sr-only">Search menu</DialogTitle>
+          <Command filter={(_v, search, keywords) => (keywords && matchesQuery(keywords[0] ?? "", search) ? 1 : 0)}>
+            <CommandInput placeholder="Search menu…" />
+            <CommandList>
+              <CommandEmpty>No matches</CommandEmpty>
+              {searchLeaves.map((leaf) => (
+                <CommandItem key={leaf.item.id} value={leaf.item.id} keywords={[leaf.hay]} onSelect={() => goFromSearch(leaf.item)}>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{label(leaf.item)}</span>
+                    {leaf.trail.length > 0 && (
+                      <span className="truncate text-xs text-muted-foreground">{leaf.trail.join(" › ")}</span>
+                    )}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
