@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
@@ -210,6 +210,35 @@ function SidebarBrand({ orgName, appLabel, ...org }: { orgName: string | null; a
   );
 }
 
+// Hide the top bar when scrolling down its scroll container, show it on scroll up.
+// Returns a ref to attach to the bar and whether it should be hidden.
+function useHideOnScroll(enabled?: boolean): [React.RefObject<HTMLDivElement | null>, boolean] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let sc = ref.current?.parentElement ?? null;
+    while (sc) {
+      const oy = getComputedStyle(sc).overflowY;
+      if (oy === "auto" || oy === "scroll") break;
+      sc = sc.parentElement;
+    }
+    if (!sc) return;
+    const target = sc;
+    let last = target.scrollTop;
+    const onScroll = () => {
+      const y = target.scrollTop;
+      const d = y - last;
+      if (Math.abs(d) < 6) return;
+      setHidden(d > 0 && y > 56);
+      last = y;
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, [enabled]);
+  return [ref, hidden];
+}
+
 // The single menu toggle (☰ when closed, ✕ when open). Living in the breadcrumb bar
 // — which renders in both states — keeps it pixel-aligned across open/close.
 function MobileToggle() {
@@ -231,11 +260,20 @@ function MobileToggle() {
 // top bar and as the open drawer's header, so the two states are seamless. The org
 // name is the org-picker trigger (no chevron). Height matches the footer (min-h-14).
 function MobileBar({
-  orgName, appLabel, section, ...org
-}: { orgName: string | null; appLabel: string; section: string | null } & OrgPickerProps) {
+  orgName, appLabel, section, scrollHide, ...org
+}: { orgName: string | null; appLabel: string; section: string | null; scrollHide?: boolean } & OrgPickerProps) {
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
+  const [ref, hidden] = useHideOnScroll(scrollHide);
   return (
-    <div className="sticky top-0 z-30 flex min-h-14 shrink-0 items-center gap-1.5 border-b border-border bg-card px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] md:hidden">
+    <div
+      ref={ref}
+      className={cn(
+        // Safe-area reserved on top, then equal 0.5rem padding above/below content.
+        "sticky top-0 z-30 flex min-h-14 shrink-0 items-center gap-1.5 border-b border-border bg-card px-3 py-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] md:hidden",
+        scrollHide && "transition-transform duration-200 ease-out",
+        scrollHide && hidden && "-translate-y-full",
+      )}
+    >
       <Logo size={22} className="shrink-0" />
       <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
         <DropdownMenu onOpenChange={(open) => { if (open) org.onOpen(); }}>
@@ -573,7 +611,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // The mobile top bar (md:hidden) sits above the routed content inside the inset.
   return (
     <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-      <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} {...orgProps} />
+      <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} scrollHide {...orgProps} />
       {children}
     </AppShell>
   );
