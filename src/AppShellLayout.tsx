@@ -127,10 +127,29 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return <>{parts}</>;
 }
 
-/** Inline filter box at the top of the menu. Hidden on the collapsed desktop rail. */
-function MenuSearchBox({ query, setQuery }: { query: string; setQuery: (v: string) => void }) {
+/** Inline filter box at the top of the menu. On the collapsed rail it becomes a
+ * single search icon button that opens the ⌘K palette (no room for an input). */
+function MenuSearchBox({
+  query, setQuery, onOpenPalette,
+}: { query: string; setQuery: (v: string) => void; onOpenPalette: () => void }) {
   const { collapsed } = useSidebar();
-  if (collapsed) return null;
+  if (collapsed) {
+    return (
+      <div className="flex justify-center px-2 pb-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onOpenPalette}
+          aria-label="Search menu"
+          title="Search (⌘K)"
+          className="size-8 text-muted-foreground hover:text-foreground"
+        >
+          <Search />
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="relative px-2 pb-1 max-md:px-1">
       <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground max-md:left-3" />
@@ -746,7 +765,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
         <SidebarBrand orgName={orgName} appLabel={appLabel} {...orgProps} />
       </SidebarHeader>
       <SidebarContent>
-        <MenuSearchBox query={query} setQuery={setQuery} />
+        <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} />
         {query.trim() ? (
           <SidebarMenu>
             {results.length === 0 ? (
