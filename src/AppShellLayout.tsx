@@ -205,7 +205,7 @@ function jwtToken(): string | null {
 
 // Decode a JWT payload as UTF-8 (base64url) — plain atob mangles non-ASCII names
 // like "OÜ".
-function decodeJwtPayload(token: string): { organization?: { name?: string } } {
+function decodeJwtPayload(token: string): { o?: { n?: string } } {
   const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes));
@@ -216,7 +216,7 @@ function orgNameFromCookie(slug?: string): string | null {
   const m = document.cookie.match(new RegExp(`trf_jwt_${slug}=([^;]+)`));
   if (!m) return null;
   try {
-    return decodeJwtPayload(m[1])?.organization?.name ?? null;
+    return decodeJwtPayload(m[1])?.o?.n ?? null;
   } catch {
     return null;
   }
