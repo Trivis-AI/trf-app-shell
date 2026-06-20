@@ -27,7 +27,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
-    "@trf/ui2": "github:triiberg/trf-ui2#5f372991f317267df859357c6f968974930d388a",
+    "@trf/ui2": "github:triiberg/trf-ui2#40d326dc6ba1332e927fbcc0c740c5bbf29a055c",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^0.469.0",

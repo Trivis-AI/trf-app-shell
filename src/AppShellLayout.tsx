@@ -654,13 +654,16 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // Organisations the user can switch between (for the brand picker). Fetched from
   // the CORS-enabled login-api host (the login portal sends no CORS headers).
   const refreshOrgs = React.useCallback(() => {
+    // The account session cookie is HttpOnly (auto-sent via credentials:include), so
+    // jwtToken() is usually null in JS now — only attach Authorization if we do have a
+    // token, never `Bearer null`. tokens=false: metadata only (org tokens are minted on
+    // demand per slug, so the switcher never needs a token per org).
     const token = jwtToken();
-    if (!token) return;
-    // tokens=false: metadata only. Org tokens are minted on demand per slug, so the
-    // switcher list never needs (or stores) a token per org.
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     fetch(`${orgsApiBase}/v1/organization?tokens=false`, {
       credentials: "include",
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`org list ${r.status}`))))
       .then((data: unknown) => {
