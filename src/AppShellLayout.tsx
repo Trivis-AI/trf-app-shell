@@ -321,7 +321,10 @@ interface OrgPickerProps {
 function OrgMenuItems({ orgs, currentSlug, onSelect }: Omit<OrgPickerProps, "onOpen">) {
   const { setMobileOpen } = useSidebar();
   return (
-    <DropdownMenuContent align="start" className="w-56">
+    <DropdownMenuContent
+      align="start"
+      className="w-56 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
+    >
       {orgs.map((o) => (
         <DropdownMenuItem key={o.id} onSelect={() => { setMobileOpen(false); onSelect(o.slug); }}>
           <Check className={cn("mr-2 size-4 shrink-0", o.slug === currentSlug ? "opacity-100" : "opacity-0")} />
