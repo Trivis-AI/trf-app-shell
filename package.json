@@ -17,7 +17,7 @@
     "src"
   ],
   "dependencies": {
-    "@trf/ui": "github:triiberg/trf-ui#master"
+    "@trf/ui": "github:Trivis-AI/trf-ui#master"
   },
   "peerDependencies": {
     "@trf/ui2": "*",
@@ -27,7 +27,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
-    "@trf/ui2": "github:triiberg/trf-ui2#40d326dc6ba1332e927fbcc0c740c5bbf29a055c",
+    "@trf/ui2": "github:Trivis-AI/trf-ui2#v0.20.0",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^0.469.0",

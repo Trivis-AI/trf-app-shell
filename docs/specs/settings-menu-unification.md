@@ -13,7 +13,7 @@ settings are split between a central `Settings` section and several per-app
 
 The menu is **hardcoded Go** in the discovery service, not DB/JSON config:
 
-- **Repo:** `triiberg/trfservices`
+- **Repo:** `Trivis-AI/trfservices`
 - **File:** `internal/service/service.go`
 - **Func:** `defaultMenusForPackage(packageKey string) model.RoleMenus` (~line 1100)
 
