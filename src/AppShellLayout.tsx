@@ -12,7 +12,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
-  Button, SearchInput, Avatar, Text, cn,
+  Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
@@ -316,38 +316,25 @@ interface OrgPickerProps {
   onOpen: () => void;
 }
 
-// Shared dropdown body: switch orgs. Only rendered when there's more than one org
-// (org-level settings now live in the unified Settings menu / Organizations section).
-function OrgMenuItems({ orgs, currentSlug, onSelect }: Omit<OrgPickerProps, "onOpen">) {
-  const { setMobileOpen } = useSidebar();
-  return (
-    <DropdownMenuContent
-      align="start"
-      className="w-56 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
-    >
-      {orgs.map((o) => (
-        <DropdownMenuItem key={o.id} onSelect={() => { setMobileOpen(false); onSelect(o.slug); }}>
-          <Check className={cn("mr-2 size-4 shrink-0", o.slug === currentSlug ? "opacity-100" : "opacity-0")} />
-          <span className="truncate">{o.name}</span>
-        </DropdownMenuItem>
-      ))}
-    </DropdownMenuContent>
-  );
-}
-
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
-// tapping the org name opens the picker).
+// tapping the org name opens the picker). The picker is ui2's OrgSwitcher: search
+// appears automatically past its threshold, type-to-filter + Enter switches.
 function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: string | null; appLabel: string; tokenBalance?: number | null } & OrgPickerProps) {
+  const { setMobileOpen } = useSidebar();
   const inner = <SidebarBrandInner orgName={orgName} appLabel={appLabel} colorKey={org.currentSlug} tokenBalance={tokenBalance} />;
   // Single org → nothing to switch to, so the brand is static (no dropdown).
   if (org.orgs.length <= 1) return <div className="w-full">{inner}</div>;
   return (
-    <DropdownMenu onOpenChange={(open) => { if (open) org.onOpen(); }}>
-      <DropdownMenuTrigger className="w-full hover:bg-muted transition-colors">
+    <OrgSwitcher
+      orgs={org.orgs}
+      currentSlug={org.currentSlug}
+      onOpen={org.onOpen}
+      onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+    >
+      <button type="button" className="w-full hover:bg-muted transition-colors">
         {inner}
-      </DropdownMenuTrigger>
-      <OrgMenuItems {...org} />
-    </DropdownMenu>
+      </button>
+    </OrgSwitcher>
   );
 }
 
@@ -405,6 +392,7 @@ function MobileBar({
 }: { orgName: string | null; appLabel: string; section: string | null; scrollHide?: boolean } & OrgPickerProps) {
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const [ref, hidden] = useHideOnScroll(scrollHide);
+  const { setMobileOpen } = useSidebar();
   return (
     <div
       ref={ref}
@@ -420,12 +408,16 @@ function MobileBar({
         {org.orgs.length <= 1 ? (
           <span className="min-w-0 truncate font-medium">{orgName ?? "TRF"}</span>
         ) : (
-          <DropdownMenu onOpenChange={(open) => { if (open) org.onOpen(); }}>
-            <DropdownMenuTrigger className="min-w-0 truncate font-medium outline-none hover:opacity-80">
+          <OrgSwitcher
+            orgs={org.orgs}
+            currentSlug={org.currentSlug}
+            onOpen={org.onOpen}
+            onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+          >
+            <button type="button" className="min-w-0 truncate font-medium outline-none hover:opacity-80">
               {orgName ?? "TRF"}
-            </DropdownMenuTrigger>
-            <OrgMenuItems {...org} />
-          </DropdownMenu>
+            </button>
+          </OrgSwitcher>
         )}
         <Sep />
         <span className="shrink-0 text-muted-foreground">{appLabel}</span>
