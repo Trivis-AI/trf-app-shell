@@ -178,6 +178,15 @@ const LANGUAGES = [
   { code: "lt", label: "Lietuvių" },
 ];
 
+// Org-switcher texts per shell language (the shell has no t() surface; static
+// strings are lang-keyed here, like menu labels are in the discovery payload).
+const ORG_SWITCHER_TEXTS: Record<string, { search: string; empty: string }> = {
+  en: { search: "Search organisations…", empty: "No organisation found." },
+  ee: { search: "Otsi organisatsiooni…", empty: "Organisatsiooni ei leitud." },
+  lv: { search: "Meklēt organizāciju…", empty: "Organizācija nav atrasta." },
+  lt: { search: "Ieškoti organizacijos…", empty: "Organizacija nerasta." },
+};
+
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "oto ai": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
@@ -314,6 +323,8 @@ interface OrgPickerProps {
   currentSlug?: string;
   onSelect: (slug: string) => void;
   onOpen: () => void;
+  searchPlaceholder: string;
+  emptyText: string;
 }
 
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
@@ -330,6 +341,8 @@ function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: st
       currentSlug={org.currentSlug}
       onOpen={org.onOpen}
       onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+      searchPlaceholder={org.searchPlaceholder}
+      emptyText={org.emptyText}
     >
       <button type="button" className="w-full hover:bg-muted transition-colors">
         {inner}
@@ -413,6 +426,8 @@ function MobileBar({
             currentSlug={org.currentSlug}
             onOpen={org.onOpen}
             onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+            searchPlaceholder={org.searchPlaceholder}
+            emptyText={org.emptyText}
           >
             <button type="button" className="min-w-0 truncate font-medium outline-none hover:opacity-80">
               {orgName ?? "TRF"}
@@ -926,11 +941,14 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     );
   };
 
+  const orgSwitcherTexts = ORG_SWITCHER_TEXTS[lang] ?? ORG_SWITCHER_TEXTS.en;
   const orgProps: OrgPickerProps = {
     orgs,
     currentSlug: slug,
     onSelect: (s) => navigate(`/app/${s}`),
     onOpen: refreshOrgs,
+    searchPlaceholder: orgSwitcherTexts.search,
+    emptyText: orgSwitcherTexts.empty,
   };
 
   const sidebar = (
