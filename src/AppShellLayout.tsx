@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
-  Files, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
-  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette,
+  Signature, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
+  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette, User,
 } from "lucide-react";
 import {
   AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
@@ -190,8 +190,8 @@ const ORG_SWITCHER_TEXTS: Record<string, { search: string; empty: string }> = {
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "oto ai": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
-  contracts: Files, items: Boxes, tables: Table2, settings: Settings,
-  audit: ClipboardCheck, organizations: Network,
+  contracts: Signature, items: Boxes, tables: Table2, settings: Settings,
+  audit: ClipboardCheck, organizations: Network, "my account": User,
 };
 
 const joinUrl = (base: string, path: string) =>
