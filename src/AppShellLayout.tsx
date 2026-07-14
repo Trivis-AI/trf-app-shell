@@ -483,7 +483,7 @@ function LanguageSelect({ translation }: { translation: TranslationLike }) {
         >
           <Globe />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="min-w-40">
           {LANGUAGES.map((l) => (
             <DropdownMenuItem key={l.code} onSelect={() => translation.setLang(l.code)}>
               <Check className={cn("mr-2 size-4 shrink-0", l.code === current ? "opacity-100" : "opacity-0")} />
@@ -544,7 +544,7 @@ function ThemeSelect({ choice, onChange }: { choice: ThemeChoice; onChange: (c: 
         >
           <TriggerIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="min-w-40">
           {THEME_OPTIONS.map(({ value, label, Icon }) => (
             <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
               <Check className={cn("mr-2 size-4 shrink-0", value === choice ? "opacity-100" : "opacity-0")} />
@@ -587,7 +587,7 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
         >
           <Palette />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-44">
+        <DropdownMenuContent align="start" className="min-w-44">
           {PALETTE_OPTIONS.map(({ value, label }) => (
             <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
               <Check className={cn("mr-2 size-4 shrink-0", value === palette ? "opacity-100" : "opacity-0")} />
