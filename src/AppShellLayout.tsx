@@ -16,6 +16,7 @@ import {
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
+import { useThemeFavicon } from "./favicon";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -603,6 +604,7 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
 
 export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, children }: AppShellLayoutProps) {
   useLangVersion();
+  useThemeFavicon();
   const navigate = useNavigate();
   const location = useLocation();
   const { slug } = useParams<{ slug: string }>();
