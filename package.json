@@ -1,7 +1,7 @@
 {
   "name": "@trf/app-shell",
   "private": true,
-  "version": "0.29.0",
+  "version": "0.30.0",
   "type": "module",
   "description": "TRF app shell — the shared sidebar/menu layout, built on @trf/ui2 primitives.",
   "scripts": {

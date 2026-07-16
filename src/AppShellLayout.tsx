@@ -17,7 +17,7 @@ import {
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
-import { ShellCrumbsProvider, useShellCrumbs } from "./crumbs";
+import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -456,45 +456,51 @@ function DesktopBar({
   appLabel, section, onSection,
 }: { appLabel: string; section: string | null; onSection: () => void }) {
   const crumbs = useShellCrumbs();
+  const { setActionsEl, setMetaEl } = useShellBarSlots();
   const navigate = useNavigate();
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const crumbLink = "min-w-0 truncate text-muted-foreground outline-none transition-colors hover:text-foreground";
   return (
-    <nav
-      aria-label="Breadcrumb"
-      className="sticky top-0 z-30 hidden min-h-14 shrink-0 items-center gap-1.5 border-b border-border bg-card px-6 py-2 text-sm md:flex"
-    >
-      <span className="shrink-0 text-muted-foreground">{appLabel}</span>
-      {section && (
-        <>
-          <Sep />
-          {crumbs.length > 0 ? (
-            <button type="button" className={crumbLink} onClick={onSection}>
-              {section}
-            </button>
-          ) : (
-            <span aria-current="page" className="min-w-0 truncate font-medium">{section}</span>
+    <div className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
+      <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
+        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+          {section && (
+            <>
+              <Sep />
+              {crumbs.length > 0 ? (
+                <button type="button" className={crumbLink} onClick={onSection}>
+                  {section}
+                </button>
+              ) : (
+                <span aria-current="page" className="min-w-0 truncate font-medium">{section}</span>
+              )}
+            </>
           )}
-        </>
-      )}
-      {crumbs.map((crumb, i) => {
-        const last = i === crumbs.length - 1;
-        return (
-          <React.Fragment key={`${i}-${crumb.label}`}>
-            <Sep />
-            {!last && crumb.href ? (
-              <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
-                {crumb.label}
-              </button>
-            ) : (
-              <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
-                {crumb.label}
-              </span>
-            )}
-          </React.Fragment>
-        );
-      })}
-    </nav>
+          {crumbs.map((crumb, i) => {
+            const last = i === crumbs.length - 1;
+            return (
+              <React.Fragment key={`${i}-${crumb.label}`}>
+                <Sep />
+                {!last && crumb.href ? (
+                  <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
+                    {crumb.label}
+                  </span>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </nav>
+        {/* ShellBarActions portal target; empty and invisible when unused. */}
+        <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+      </div>
+      {/* ShellBarMeta portal target: second row under the crumbs; collapses when empty. */}
+      <div ref={setMetaEl} className="flex flex-wrap items-center gap-3 px-6 pb-2.5 text-sm [&:empty]:hidden" />
+    </div>
   );
 }
 
