@@ -17,6 +17,7 @@ import {
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
+import { ShellCrumbsProvider, useShellCrumbs } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -58,6 +59,8 @@ export interface AppShellLayoutProps {
   orgsApiUrl?: string;
   /** Optional per-row hover action; return null for rows without one. */
   itemAction?: (item: MenuItem, ctx: { href?: string; internal: boolean }) => ItemAction | null;
+  /** Desktop breadcrumb top bar. Default true; disable for full-bleed screens. */
+  topBar?: boolean;
   children: React.ReactNode;
 }
 
@@ -444,6 +447,57 @@ function MobileBar({
   );
 }
 
+// Desktop breadcrumb top bar: app label > active menu section > page-provided
+// tail crumbs (ShellCrumb). Persistent (no scroll-hide); the org identity lives
+// in the sidebar brand, so unlike MobileBar there is no avatar/org switcher here.
+// The section links back to its list route only when tail crumbs exist, which
+// is what replaces the per-page inline "Back" links.
+function DesktopBar({
+  appLabel, section, onSection,
+}: { appLabel: string; section: string | null; onSection: () => void }) {
+  const crumbs = useShellCrumbs();
+  const navigate = useNavigate();
+  const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
+  const crumbLink = "min-w-0 truncate text-muted-foreground outline-none transition-colors hover:text-foreground";
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="sticky top-0 z-30 hidden min-h-14 shrink-0 items-center gap-1.5 border-b border-border bg-card px-6 py-2 text-sm md:flex"
+    >
+      <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+      {section && (
+        <>
+          <Sep />
+          {crumbs.length > 0 ? (
+            <button type="button" className={crumbLink} onClick={onSection}>
+              {section}
+            </button>
+          ) : (
+            <span aria-current="page" className="min-w-0 truncate font-medium">{section}</span>
+          )}
+        </>
+      )}
+      {crumbs.map((crumb, i) => {
+        const last = i === crumbs.length - 1;
+        return (
+          <React.Fragment key={`${i}-${crumb.label}`}>
+            <Sep />
+            {!last && crumb.href ? (
+              <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
+                {crumb.label}
+              </button>
+            ) : (
+              <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
+                {crumb.label}
+              </span>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </nav>
+  );
+}
+
 // Always-visible row action (ghost icon button), right-aligned and vertically
 // centered to line up with the row chevrons. Hidden when the rail is collapsed.
 // Requires the enclosing SidebarMenuItem to be `relative`.
@@ -602,7 +656,7 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
   );
 }
 
-export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, children }: AppShellLayoutProps) {
+export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
   useThemeFavicon();
   const navigate = useNavigate();
@@ -781,18 +835,21 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return ids;
   };
 
-  // Label of the deepest active leaf (the current "section", e.g. "Chat") — for the breadcrumb.
-  const activeSectionLabel = (nodes: MenuItem[]): string | null => {
+  // Deepest active leaf (the current "section", e.g. "Chat") — label for the
+  // mobile breadcrumb, full item for the desktop bar (which links via go()).
+  const activeSectionLeaf = (nodes: MenuItem[]): MenuItem | null => {
     for (const n of nodes) {
       if (n.children?.length) {
-        const sub = activeSectionLabel(n.children);
+        const sub = activeSectionLeaf(n.children);
         if (sub) return sub;
       } else if (isActive(n)) {
-        return label(n);
+        return n;
       }
     }
     return null;
   };
+
+  const sectionLeaf = activeSectionLeaf(items);
 
   // Auto-open the active route's group(s) once the menu has loaded / the route changes.
   useEffect(() => {
@@ -956,7 +1013,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const sidebar = (
     <Sidebar>
       {/* Mobile drawer header: the same breadcrumb bar as the closed top bar. */}
-      <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} {...orgProps} />
+      <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} {...orgProps} />
       {/* Desktop brand (org picker). */}
       <SidebarHeader className="hidden md:flex">
         <SidebarBrand orgName={orgName} appLabel={appLabel} tokenBalance={tokenBalance} {...orgProps} />
@@ -1012,11 +1069,19 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   );
 
   // Each page owns its own content container (chat fills height; others center).
-  // The mobile top bar (md:hidden) sits above the routed content inside the inset.
+  // The shell owns the top chrome inside the inset: the mobile bar (md:hidden)
+  // and, unless topBar is disabled, the desktop breadcrumb bar (hidden md:flex).
   return (
-    <>
+    <ShellCrumbsProvider>
       <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-        <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} scrollHide {...orgProps} />
+        <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
+        {topBar && (
+          <DesktopBar
+            appLabel={appLabel}
+            section={sectionLeaf ? label(sectionLeaf) : null}
+            onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
+          />
+        )}
         {children}
       </AppShell>
 
@@ -1042,6 +1107,6 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           </Command>
         </DialogContent>
       </Dialog>
-    </>
+    </ShellCrumbsProvider>
   );
 }
