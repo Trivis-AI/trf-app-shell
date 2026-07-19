@@ -468,13 +468,18 @@ function DesktopBar({
           {section && (
             <>
               <Sep />
-              {crumbs.length > 0 ? (
-                <button type="button" className={crumbLink} onClick={onSection}>
-                  {section}
-                </button>
-              ) : (
-                <span aria-current="page" className="min-w-0 truncate font-medium">{section}</span>
-              )}
+              {/* Always a link: on the section's own page it navigates back to the
+                  bare list route, which doubles as a reset of search/filter params. */}
+              <button
+                type="button"
+                aria-current={crumbs.length === 0 ? "page" : undefined}
+                className={crumbs.length > 0
+                  ? crumbLink
+                  : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
+                onClick={onSection}
+              >
+                {section}
+              </button>
             </>
           )}
           {crumbs.map((crumb, i) => {
