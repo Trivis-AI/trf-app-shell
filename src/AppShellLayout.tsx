@@ -460,8 +460,27 @@ function DesktopBar({
   const navigate = useNavigate();
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const crumbLink = "min-w-0 truncate text-muted-foreground outline-none transition-colors hover:text-foreground";
+
+  // Publish the bar's height as --trf-topbar-h so sticky page elements (ui2's
+  // sticky table headers) can pin themselves right below it. display:none on
+  // mobile measures as 0, which is correct there.
+  const barRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--trf-topbar-h", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--trf-topbar-h");
+    };
+  }, []);
+
   return (
-    <div className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
+    <div ref={barRef} className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
       <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
         <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="shrink-0 text-muted-foreground">{appLabel}</span>
