@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
-  Files, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
-  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette,
+  Signature, Boxes, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
+  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette, User,
 } from "lucide-react";
 import {
   AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
@@ -12,10 +12,12 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
-  Button, SearchInput, Avatar, Text, cn,
+  Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
+import { useThemeFavicon } from "./favicon";
+import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -57,6 +59,8 @@ export interface AppShellLayoutProps {
   orgsApiUrl?: string;
   /** Optional per-row hover action; return null for rows without one. */
   itemAction?: (item: MenuItem, ctx: { href?: string; internal: boolean }) => ItemAction | null;
+  /** Desktop breadcrumb top bar. Default true; disable for full-bleed screens. */
+  topBar?: boolean;
   children: React.ReactNode;
 }
 
@@ -178,11 +182,20 @@ const LANGUAGES = [
   { code: "lt", label: "Lietuvių" },
 ];
 
+// Org-switcher texts per shell language (the shell has no t() surface; static
+// strings are lang-keyed here, like menu labels are in the discovery payload).
+const ORG_SWITCHER_TEXTS: Record<string, { search: string; empty: string }> = {
+  en: { search: "Search organisations…", empty: "No organisation found." },
+  ee: { search: "Otsi organisatsiooni…", empty: "Organisatsiooni ei leitud." },
+  lv: { search: "Meklēt organizāciju…", empty: "Organizācija nav atrasta." },
+  lt: { search: "Ieškoti organizacijos…", empty: "Organizacija nerasta." },
+};
+
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "oto ai": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
-  contracts: Files, items: Boxes, tables: Table2, settings: Settings,
-  audit: ClipboardCheck, organizations: Network,
+  contracts: Signature, items: Boxes, tables: Table2, settings: Settings,
+  audit: ClipboardCheck, organizations: Network, "my account": User,
 };
 
 const joinUrl = (base: string, path: string) =>
@@ -314,40 +327,31 @@ interface OrgPickerProps {
   currentSlug?: string;
   onSelect: (slug: string) => void;
   onOpen: () => void;
-}
-
-// Shared dropdown body: switch orgs. Only rendered when there's more than one org
-// (org-level settings now live in the unified Settings menu / Organizations section).
-function OrgMenuItems({ orgs, currentSlug, onSelect }: Omit<OrgPickerProps, "onOpen">) {
-  const { setMobileOpen } = useSidebar();
-  return (
-    <DropdownMenuContent
-      align="start"
-      className="w-56 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
-    >
-      {orgs.map((o) => (
-        <DropdownMenuItem key={o.id} onSelect={() => { setMobileOpen(false); onSelect(o.slug); }}>
-          <Check className={cn("mr-2 size-4 shrink-0", o.slug === currentSlug ? "opacity-100" : "opacity-0")} />
-          <span className="truncate">{o.name}</span>
-        </DropdownMenuItem>
-      ))}
-    </DropdownMenuContent>
-  );
+  searchPlaceholder: string;
+  emptyText: string;
 }
 
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
-// tapping the org name opens the picker).
+// tapping the org name opens the picker). The picker is ui2's OrgSwitcher: search
+// appears automatically past its threshold, type-to-filter + Enter switches.
 function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: string | null; appLabel: string; tokenBalance?: number | null } & OrgPickerProps) {
+  const { setMobileOpen } = useSidebar();
   const inner = <SidebarBrandInner orgName={orgName} appLabel={appLabel} colorKey={org.currentSlug} tokenBalance={tokenBalance} />;
   // Single org → nothing to switch to, so the brand is static (no dropdown).
   if (org.orgs.length <= 1) return <div className="w-full">{inner}</div>;
   return (
-    <DropdownMenu onOpenChange={(open) => { if (open) org.onOpen(); }}>
-      <DropdownMenuTrigger className="w-full hover:bg-muted transition-colors">
+    <OrgSwitcher
+      orgs={org.orgs}
+      currentSlug={org.currentSlug}
+      onOpen={org.onOpen}
+      onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+      searchPlaceholder={org.searchPlaceholder}
+      emptyText={org.emptyText}
+    >
+      <button type="button" className="w-full hover:bg-muted transition-colors">
         {inner}
-      </DropdownMenuTrigger>
-      <OrgMenuItems {...org} />
-    </DropdownMenu>
+      </button>
+    </OrgSwitcher>
   );
 }
 
@@ -405,6 +409,7 @@ function MobileBar({
 }: { orgName: string | null; appLabel: string; section: string | null; scrollHide?: boolean } & OrgPickerProps) {
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const [ref, hidden] = useHideOnScroll(scrollHide);
+  const { setMobileOpen } = useSidebar();
   return (
     <div
       ref={ref}
@@ -420,18 +425,105 @@ function MobileBar({
         {org.orgs.length <= 1 ? (
           <span className="min-w-0 truncate font-medium">{orgName ?? "TRF"}</span>
         ) : (
-          <DropdownMenu onOpenChange={(open) => { if (open) org.onOpen(); }}>
-            <DropdownMenuTrigger className="min-w-0 truncate font-medium outline-none hover:opacity-80">
+          <OrgSwitcher
+            orgs={org.orgs}
+            currentSlug={org.currentSlug}
+            onOpen={org.onOpen}
+            onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+            searchPlaceholder={org.searchPlaceholder}
+            emptyText={org.emptyText}
+          >
+            <button type="button" className="min-w-0 truncate font-medium outline-none hover:opacity-80">
               {orgName ?? "TRF"}
-            </DropdownMenuTrigger>
-            <OrgMenuItems {...org} />
-          </DropdownMenu>
+            </button>
+          </OrgSwitcher>
         )}
         <Sep />
         <span className="shrink-0 text-muted-foreground">{appLabel}</span>
         {section && (<><Sep /><span className="min-w-0 truncate font-medium">{section}</span></>)}
       </div>
       <MobileToggle />
+    </div>
+  );
+}
+
+// Desktop breadcrumb top bar: app label > active menu section > page-provided
+// tail crumbs (ShellCrumb). Persistent (no scroll-hide); the org identity lives
+// in the sidebar brand, so unlike MobileBar there is no avatar/org switcher here.
+// The section links back to its list route only when tail crumbs exist, which
+// is what replaces the per-page inline "Back" links.
+function DesktopBar({
+  appLabel, section, onSection,
+}: { appLabel: string; section: string | null; onSection: () => void }) {
+  const crumbs = useShellCrumbs();
+  const { setActionsEl, setMetaEl } = useShellBarSlots();
+  const navigate = useNavigate();
+  const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
+  const crumbLink = "min-w-0 truncate text-muted-foreground outline-none transition-colors hover:text-foreground";
+
+  // Publish the bar's height as --trf-topbar-h so sticky page elements (ui2's
+  // sticky table headers) can pin themselves right below it. display:none on
+  // mobile measures as 0, which is correct there.
+  const barRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--trf-topbar-h", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--trf-topbar-h");
+    };
+  }, []);
+
+  return (
+    <div ref={barRef} className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
+      <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
+        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+          {section && (
+            <>
+              <Sep />
+              {/* Always a link: on the section's own page it navigates back to the
+                  bare list route, which doubles as a reset of search/filter params. */}
+              <button
+                type="button"
+                aria-current={crumbs.length === 0 ? "page" : undefined}
+                className={crumbs.length > 0
+                  ? crumbLink
+                  : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
+                onClick={onSection}
+              >
+                {section}
+              </button>
+            </>
+          )}
+          {crumbs.map((crumb, i) => {
+            const last = i === crumbs.length - 1;
+            return (
+              <React.Fragment key={`${i}-${crumb.label}`}>
+                <Sep />
+                {!last && crumb.href ? (
+                  <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
+                    {crumb.label}
+                  </span>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </nav>
+        {/* ShellBarActions portal target; empty and invisible when unused. */}
+        <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+      </div>
+      {/* ShellBarMeta portal target: second row under the crumbs; collapses when empty. */}
+      <div ref={setMetaEl} className="flex flex-wrap items-center gap-3 px-6 pb-2.5 text-sm [&:empty]:hidden" />
     </div>
   );
 }
@@ -476,7 +568,7 @@ function LanguageSelect({ translation }: { translation: TranslationLike }) {
         >
           <Globe />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="min-w-40">
           {LANGUAGES.map((l) => (
             <DropdownMenuItem key={l.code} onSelect={() => translation.setLang(l.code)}>
               <Check className={cn("mr-2 size-4 shrink-0", l.code === current ? "opacity-100" : "opacity-0")} />
@@ -537,7 +629,7 @@ function ThemeSelect({ choice, onChange }: { choice: ThemeChoice; onChange: (c: 
         >
           <TriggerIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-40">
+        <DropdownMenuContent align="start" className="min-w-40">
           {THEME_OPTIONS.map(({ value, label, Icon }) => (
             <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
               <Check className={cn("mr-2 size-4 shrink-0", value === choice ? "opacity-100" : "opacity-0")} />
@@ -580,7 +672,7 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
         >
           <Palette />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-44">
+        <DropdownMenuContent align="start" className="min-w-44">
           {PALETTE_OPTIONS.map(({ value, label }) => (
             <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
               <Check className={cn("mr-2 size-4 shrink-0", value === palette ? "opacity-100" : "opacity-0")} />
@@ -594,8 +686,9 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
   );
 }
 
-export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, children }: AppShellLayoutProps) {
+export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
+  useThemeFavicon();
   const navigate = useNavigate();
   const location = useLocation();
   const { slug } = useParams<{ slug: string }>();
@@ -772,18 +865,21 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return ids;
   };
 
-  // Label of the deepest active leaf (the current "section", e.g. "Chat") — for the breadcrumb.
-  const activeSectionLabel = (nodes: MenuItem[]): string | null => {
+  // Deepest active leaf (the current "section", e.g. "Chat") — label for the
+  // mobile breadcrumb, full item for the desktop bar (which links via go()).
+  const activeSectionLeaf = (nodes: MenuItem[]): MenuItem | null => {
     for (const n of nodes) {
       if (n.children?.length) {
-        const sub = activeSectionLabel(n.children);
+        const sub = activeSectionLeaf(n.children);
         if (sub) return sub;
       } else if (isActive(n)) {
-        return label(n);
+        return n;
       }
     }
     return null;
   };
+
+  const sectionLeaf = activeSectionLeaf(items);
 
   // Auto-open the active route's group(s) once the menu has loaded / the route changes.
   useEffect(() => {
@@ -934,17 +1030,20 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     );
   };
 
+  const orgSwitcherTexts = ORG_SWITCHER_TEXTS[lang] ?? ORG_SWITCHER_TEXTS.en;
   const orgProps: OrgPickerProps = {
     orgs,
     currentSlug: slug,
     onSelect: (s) => navigate(`/app/${s}`),
     onOpen: refreshOrgs,
+    searchPlaceholder: orgSwitcherTexts.search,
+    emptyText: orgSwitcherTexts.empty,
   };
 
   const sidebar = (
     <Sidebar>
       {/* Mobile drawer header: the same breadcrumb bar as the closed top bar. */}
-      <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} {...orgProps} />
+      <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} {...orgProps} />
       {/* Desktop brand (org picker). */}
       <SidebarHeader className="hidden md:flex">
         <SidebarBrand orgName={orgName} appLabel={appLabel} tokenBalance={tokenBalance} {...orgProps} />
@@ -1000,11 +1099,19 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   );
 
   // Each page owns its own content container (chat fills height; others center).
-  // The mobile top bar (md:hidden) sits above the routed content inside the inset.
+  // The shell owns the top chrome inside the inset: the mobile bar (md:hidden)
+  // and, unless topBar is disabled, the desktop breadcrumb bar (hidden md:flex).
   return (
-    <>
+    <ShellCrumbsProvider>
       <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-        <MobileBar orgName={orgName} appLabel={appLabel} section={activeSectionLabel(items)} scrollHide {...orgProps} />
+        <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
+        {topBar && (
+          <DesktopBar
+            appLabel={appLabel}
+            section={sectionLeaf ? label(sectionLeaf) : null}
+            onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
+          />
+        )}
         {children}
       </AppShell>
 
@@ -1030,6 +1137,6 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           </Command>
         </DialogContent>
       </Dialog>
-    </>
+    </ShellCrumbsProvider>
   );
 }
