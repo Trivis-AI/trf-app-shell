@@ -1,0 +1,43 @@
+name: check-ui2
+
+# Design system conformance. Runs on branches and pull requests. This repo ships no image, it is consumed
+# from source as a github tag, so there is no build to gate: the pull request is
+# the only place to catch drift before it reaches every app that imports it.
+#
+# The script is fetched from a trf-ui2 release tag rather than from the app's own
+# node_modules, on purpose: it imports nothing but Node builtins, so it runs the
+# same way on an app still pinned to an older @trf/ui2. Bump the tag here when a
+# newer check is wanted, independently of the pin in package.json.
+#
+# No --strict yet: this repo still carries drift findings, so the check reports
+# them without failing. Wiring errors do fail, and are at zero across the suite.
+# Add --strict the moment this repo reports clean. See
+# trf-ui2/docs/18-drift-backlog.md.
+on:
+  push:
+    branches: [main, trivis]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-ui2:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Only so the @source globs in the app's CSS resolve against a real
+      # node_modules. Without it the check still runs, and says so.
+      - run: npm ci
+
+      - name: Design system wiring check
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/Trivis-AI/trf-ui2/v7.2.8/scripts/check-consumer.mjs -o /tmp/check.mjs
+          node /tmp/check.mjs
