@@ -5,7 +5,8 @@
   "type": "module",
   "description": "TRF app shell — the shared sidebar/menu layout, built on @trf/ui2 primitives.",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:ui2": "trf-ui2-check"
   },
   "exports": {
     ".": {
@@ -27,7 +28,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
-    "@trf/ui2": "github:Trivis-AI/trf-ui2#v7.0.13",
+    "@trf/ui2": "github:Trivis-AI/trf-ui2#v7.2.11",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^0.469.0",
