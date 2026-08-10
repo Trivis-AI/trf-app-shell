@@ -12,11 +12,12 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
-  Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
+  Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
+import { isStagingHost, useStagingTitle } from "./environment";
 import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
@@ -421,6 +422,7 @@ function MobileBar({
       )}
     >
       <Avatar name={orgName} colorKey={org.currentSlug} size={24} className="shrink-0" />
+      <StagingChip />
       <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
         {org.orgs.length <= 1 ? (
           <span className="min-w-0 truncate font-medium">{orgName ?? "TRF"}</span>
@@ -452,6 +454,28 @@ function MobileBar({
 // in the sidebar brand, so unlike MobileBar there is no avatar/org switcher here.
 // The section links back to its list route only when tail crumbs exist, which
 // is what replaces the per-page inline "Back" links.
+/**
+ * Environment mark, rendered only on staging. Amber rather than destructive
+ * red: being on staging is not an error, it is a fact worth noticing, and a red
+ * banner on every screen of a working environment is noise people learn to
+ * ignore within a day.
+ *
+ * It sits in the bar rather than floating over the page because it has to
+ * survive scrolling without ever covering content.
+ */
+function StagingChip({ className }: { className?: string }) {
+  if (!isStagingHost()) return null;
+  return (
+    <Badge
+      variant="warning"
+      title="Staging environment (trf.is) — not production data"
+      className={cn("shrink-0 uppercase tracking-wider", className)}
+    >
+      Staging
+    </Badge>
+  );
+}
+
 function DesktopBar({
   appLabel, section, onSection,
 }: { appLabel: string; section: string | null; onSection: () => void }) {
@@ -482,6 +506,7 @@ function DesktopBar({
   return (
     <div ref={barRef} className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
       <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
+        <StagingChip className="mr-1" />
         <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="shrink-0 text-muted-foreground">{appLabel}</span>
           {section && (
@@ -689,6 +714,7 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
 export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
   useThemeFavicon();
+  useStagingTitle();
   const navigate = useNavigate();
   const location = useLocation();
   const { slug } = useParams<{ slug: string }>();
