@@ -15,6 +15,7 @@ import {
   Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
+import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
 import { isStagingHost, useStagingTitle } from "./environment";
@@ -772,6 +773,11 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // Shed pre-cutover per-org cookies once, so the Cookie header stops growing with the
   // number of accessible orgs. Org tokens now live in the per-tab cache.
   useEffect(() => { clearLegacyOrgCookies(); }, []);
+
+  // Remember the org and app this tab is in, so a new tab on a bare app root — or the
+  // marketing site on the apex — reopens it instead of showing a pre-login screen
+  // (see orgLanding.ts).
+  useEffect(() => { rememberOrg(slug, appId); }, [slug, appId]);
 
   // Organisations the user can switch between (for the brand picker). Fetched from
   // the CORS-enabled login-api host (the login portal sends no CORS headers).
