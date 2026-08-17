@@ -18,7 +18,8 @@ import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
-import { isStagingHost, useStagingTitle } from "./environment";
+import { isStagingHost } from "./environment";
+import { useDocumentTitle } from "./title";
 import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
@@ -197,7 +198,9 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "oto ai": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
   contracts: Signature, items: Boxes, tables: Table2, settings: Settings,
-  audit: ClipboardCheck, organizations: Network, "my account": User,
+  // "my account" is the pre-2026-08 label for the same portal group; keep it so a
+  // browser holding an older cached menu still gets the icon rather than the fallback.
+  audit: ClipboardCheck, organizations: Network, "my account": User, "my trivis": User,
 };
 
 const joinUrl = (base: string, path: string) =>
@@ -477,6 +480,20 @@ function StagingChip({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Renders nothing; owns the tab title while mounted.
+ *
+ * It sits inside ShellCrumbsProvider because that is the only place
+ * useShellCrumbs() can see the tail crumb a detail page publishes:
+ * AppShellLayout's own body *renders* the provider, so a call up there reads an
+ * empty registry no matter what the page did.
+ */
+function DocumentTitle({ orgName, path }: { orgName: string | null; path: string[] }) {
+  const crumbs = useShellCrumbs();
+  useDocumentTitle({ orgName, path: [...path, ...crumbs.map((c) => c.label)] });
+  return null;
+}
+
 function DesktopBar({
   appLabel, section, onSection,
 }: { appLabel: string; section: string | null; onSection: () => void }) {
@@ -715,7 +732,6 @@ function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: s
 export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
   useThemeFavicon();
-  useStagingTitle();
   const navigate = useNavigate();
   const location = useLocation();
   const { slug } = useParams<{ slug: string }>();
@@ -911,7 +927,37 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return null;
   };
 
+  // The whole chain down to that leaf ("Sales" › "Invoices"), for the tab title.
+  // Same walk as activeSectionLeaf, which returns only the leaf because that is
+  // all the bars need.
+  const activeSectionPath = (nodes: MenuItem[]): MenuItem[] | null => {
+    for (const n of nodes) {
+      if (n.children?.length) {
+        const sub = activeSectionPath(n.children);
+        if (!sub) continue;
+        // A group holding a single leaf renders as one row carrying the group's
+        // label (see renderNode), so naming both would make the title disagree
+        // with the sidebar it describes.
+        const collapsed = n.children.length === 1 && !n.children[0].children?.length;
+        return collapsed ? [n] : [n, ...sub];
+      }
+      if (isActive(n)) return [n];
+    }
+    return null;
+  };
+
   const sectionLeaf = activeSectionLeaf(items);
+  // Until the discovery menu lands — and on any route it does not cover — fall
+  // back to the app's own label, so the title never degrades to a bare product
+  // name on a cold load.
+  const sectionPath = activeSectionPath(items);
+  // Outermost group + leaf, dropping any middle levels. Settings is three deep
+  // ("Settings › Sales & Invoicing › Invoice settings"), which pushes the page's
+  // own name past where a tab or a bookmark truncates — the exact thing the
+  // title exists to fix. Two levels is also the shape the rest of the menu has.
+  const titlePath = sectionPath?.length
+    ? (sectionPath.length > 2 ? [sectionPath[0], sectionPath[sectionPath.length - 1]] : sectionPath).map(label)
+    : [appLabel];
 
   // Auto-open the active route's group(s) once the menu has loaded / the route changes.
   useEffect(() => {
@@ -1135,6 +1181,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // and, unless topBar is disabled, the desktop breadcrumb bar (hidden md:flex).
   return (
     <ShellCrumbsProvider>
+      <DocumentTitle orgName={orgName} path={titlePath} />
       <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
         <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
         {topBar && (

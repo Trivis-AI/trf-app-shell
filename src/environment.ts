@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-
 /*
  * Telling the two clusters apart.
  *
@@ -14,36 +12,15 @@ import { useEffect } from "react";
  * title, plus a chip in the shell for once you are on the page. Production is
  * left completely unmarked — the normal case should not carry decoration, and
  * anything shown everywhere stops being read.
+ *
+ * The title half of that lives in title.ts. It used to be a MutationObserver
+ * here, re-applying a "[STAGING] " prefix in case an app rewrote the title on
+ * navigation; now that the shell composes the whole title in one place, the
+ * prefix is simply part of what it composes.
  */
 
 /** True on a real *.trf.is host. Localhost dev is not staging. */
 export function isStagingHost(): boolean {
   if (typeof window === "undefined") return false;
   return window.location.hostname.endsWith("trf.is");
-}
-
-const TITLE_PREFIX = "[STAGING] ";
-
-/**
- * Prefixes the tab title on staging, and keeps it prefixed when the app
- * rewrites the title on navigation. The observer is cheap (title changes are
- * rare) and guarded against reacting to its own write.
- */
-export function useStagingTitle(): void {
-  useEffect(() => {
-    if (!isStagingHost()) return;
-
-    const apply = () => {
-      if (!document.title.startsWith(TITLE_PREFIX)) {
-        document.title = TITLE_PREFIX + document.title;
-      }
-    };
-    apply();
-
-    const titleEl = document.querySelector("title");
-    if (!titleEl) return;
-    const observer = new MutationObserver(apply);
-    observer.observe(titleEl, { childList: true });
-    return () => observer.disconnect();
-  }, []);
 }
