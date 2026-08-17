@@ -2,7 +2,7 @@ import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  Sparkles, BadgeDollarSign, Receipt, Wallet, Package, ScrollText, PieChart, Handshake,
+  Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
   Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
   Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette, User,
   House, Users,
@@ -203,6 +203,10 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
   contracts: Signature, "assets and warehouse": CirclePile, tables: Table2, settings: Settings,
   personnel: Users,
+  // Member-role menu only, which is why these two went unnoticed. "Invoicing" holds both
+  // sales and purchase invoices, so it takes neither Sales' nor Purchase's icon; "Contacts"
+  // is crm-home under a different label, so it shares CRM's.
+  invoicing: ReceiptText, contacts: Handshake,
   // "my account" is the pre-2026-08 label for the same portal group; keep it so a
   // browser holding an older cached menu still gets an icon rather than the fallback.
   audit: ClipboardCheck, organizations: Network, "my account": User, "my trivis": House,
