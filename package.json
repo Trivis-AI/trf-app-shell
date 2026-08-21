@@ -1,7 +1,7 @@
 {
   "name": "@trf/app-shell",
   "private": true,
-  "version": "0.30.2",
+  "version": "0.36.0",
   "type": "module",
   "description": "TRF app shell — the shared sidebar/menu layout, built on @trf/ui2 primitives.",
   "scripts": {
@@ -22,7 +22,7 @@
   },
   "peerDependencies": {
     "@trf/ui2": "*",
-    "lucide-react": ">=0.400.0",
+    "lucide-react": ">=1.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"
@@ -31,7 +31,7 @@
     "@trf/ui2": "github:Trivis-AI/trf-ui2#v7.2.11",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
-    "lucide-react": "^0.469.0",
+    "lucide-react": "^1.31.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.10.0",

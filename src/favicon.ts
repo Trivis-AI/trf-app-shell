@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { isStagingHost } from "./environment";
+
 // Favicon injected at runtime so every consumer app gets the brand icon from
 // this single source (the package ships raw source, so inline data-URIs avoid
 // depending on the consumer's asset pipeline). Follows the OS theme, not the
@@ -11,6 +13,13 @@ const GLYPH =
 // Bare glyph, no background plate: brand ink on light chrome, white on dark.
 const LIGHT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="${GLYPH}" fill="#122310"/></svg>`;
 const DARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="${GLYPH}" fill="white"/></svg>`;
+
+// Staging gets the glyph on a filled amber plate. The tab strip is where
+// somebody with both clusters open actually looks, and a shape that differs at
+// favicon size beats any wording — at 16px the plate reads as a colour block
+// long before the glyph resolves. Same mark in both OS themes: the point is to
+// look wrong next to a production tab, not to blend in.
+const STAGING_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#b45309"/><path d="${GLYPH}" fill="white"/></svg>`;
 
 const toHref = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
 
@@ -25,6 +34,10 @@ export function useThemeFavicon(): void {
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
+      if (isStagingHost()) {
+        link.href = toHref(STAGING_SVG);
+        return;
+      }
       link.href = toHref(mq.matches ? DARK_SVG : LIGHT_SVG);
     };
     apply();
