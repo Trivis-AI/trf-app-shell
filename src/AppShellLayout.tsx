@@ -21,7 +21,7 @@ import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
 import { isStagingHost } from "./environment";
 import { useDocumentTitle } from "./title";
-import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots } from "./crumbs";
+import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots, useShellBarPinned } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -508,19 +508,21 @@ function DesktopBar({
 }: { appLabel: string; section: string | null; onSection: () => void }) {
   const crumbs = useShellCrumbs();
   const { setActionsEl, setMetaEl } = useShellBarSlots();
+  const pinned = useShellBarPinned();
   const navigate = useNavigate();
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const crumbLink = "min-w-0 truncate text-muted-foreground outline-none transition-colors hover:text-foreground";
 
   // Publish the bar's height as --trf-topbar-h so sticky page elements (ui2's
   // sticky table headers) can pin themselves right below it. display:none on
-  // mobile measures as 0, which is correct there.
+  // mobile measures as 0, which is correct there. An unpinned bar scrolls away,
+  // so those elements should pin to the viewport top: publish 0.
   const barRef = React.useRef<HTMLDivElement>(null);
   React.useLayoutEffect(() => {
     const el = barRef.current;
     if (!el) return;
     const publish = () =>
-      document.documentElement.style.setProperty("--trf-topbar-h", `${el.offsetHeight}px`);
+      document.documentElement.style.setProperty("--trf-topbar-h", pinned ? `${el.offsetHeight}px` : "0px");
     publish();
     const ro = new ResizeObserver(publish);
     ro.observe(el);
@@ -528,10 +530,10 @@ function DesktopBar({
       ro.disconnect();
       document.documentElement.style.removeProperty("--trf-topbar-h");
     };
-  }, []);
+  }, [pinned]);
 
   return (
-    <div ref={barRef} className="sticky top-0 z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex">
+    <div ref={barRef} className={`${pinned ? "sticky top-0 " : ""}z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex`}>
       <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
         <StagingChip className="mr-1" />
         <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
