@@ -13,7 +13,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
-  Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher,
+  Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher, OrgTag,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { rememberOrg } from "./orgLanding";
@@ -68,7 +68,16 @@ export interface AppShellLayoutProps {
   children: React.ReactNode;
 }
 
-interface OrgOption { id: string; name: string; slug: string }
+/* color and tag mark an organization apart from another one carrying the same
+   company name (a tenant migrated from another system and the live copy of it).
+   Both are empty on every organization nobody has marked, and empty means the
+   avatar keeps the colour hashed from the slug and no tag is drawn. */
+interface OrgOption { id: string; name: string; slug: string; color?: string; tag?: string }
+
+/* Opening another organization goes to the same place switching to it goes: the
+   app root under its slug, not the current deep route, whose ids belong to the
+   org you are leaving. */
+const orgHrefFor = (org: { slug: string }) => `/app/${org.slug}`;
 
 /* ── Menu search ──────────────────────────────────────────────────────────
  * Flattens the discovery menu to navigable leaves and matches a query against
@@ -309,7 +318,7 @@ function useLangVersion(): void {
   }, []);
 }
 
-function SidebarBrandInner({ orgName, appLabel, colorKey, tokenBalance }: { orgName: string | null; appLabel: string; colorKey?: string; tokenBalance?: number | null }) {
+function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, tokenBalance }: { orgName: string | null; appLabel: string; colorKey?: string; color?: string; tag?: string; tokenBalance?: number | null }) {
   const { collapsed } = useSidebar();
   // Show the org's token balance under the name once loaded; fall back to the app
   // label while loading / when unavailable.
@@ -318,7 +327,7 @@ function SidebarBrandInner({ orgName, appLabel, colorKey, tokenBalance }: { orgN
     : appLabel;
   return (
     <div className="flex w-full items-center gap-2 overflow-hidden px-4 py-3.5">
-      <Avatar name={orgName} colorKey={colorKey} size={28} className="shrink-0" />
+      <Avatar name={orgName} colorKey={colorKey} color={color} size={28} className="shrink-0" />
       <div
         className={cn(
           "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity] duration-200",
@@ -326,7 +335,10 @@ function SidebarBrandInner({ orgName, appLabel, colorKey, tokenBalance }: { orgN
         )}
       >
         <div className="min-w-0 flex-1 text-left">
-          <Text as="span" size="sm" weight="semibold" className="block truncate leading-tight">{orgName ?? "TRF"}</Text>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Text as="span" size="sm" weight="semibold" className="min-w-0 truncate leading-tight">{orgName ?? "TRF"}</Text>
+            {tag && <OrgTag color={color} colorKey={colorKey} name={orgName}>{tag}</OrgTag>}
+          </div>
           <Text as="span" size="xs" tone="muted" className="block truncate">{subtitle}</Text>
         </div>
         {/* Desktop-only org-switcher affordance (mobile uses the breadcrumb). */}
@@ -350,7 +362,19 @@ interface OrgPickerProps {
 // appears automatically past its threshold, type-to-filter + Enter switches.
 function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: string | null; appLabel: string; tokenBalance?: number | null } & OrgPickerProps) {
   const { setMobileOpen } = useSidebar();
-  const inner = <SidebarBrandInner orgName={orgName} appLabel={appLabel} colorKey={org.currentSlug} tokenBalance={tokenBalance} />;
+  // The list arrives asynchronously, so before it lands there are no marks and the
+  // brand renders exactly as it did before they existed.
+  const current = org.orgs.find((o) => o.slug === org.currentSlug);
+  const inner = (
+    <SidebarBrandInner
+      orgName={orgName}
+      appLabel={appLabel}
+      colorKey={org.currentSlug}
+      color={current?.color}
+      tag={current?.tag}
+      tokenBalance={tokenBalance}
+    />
+  );
   // Single org → nothing to switch to, so the brand is static (no dropdown).
   if (org.orgs.length <= 1) return <div className="w-full">{inner}</div>;
   return (
@@ -359,6 +383,7 @@ function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: st
       currentSlug={org.currentSlug}
       onOpen={org.onOpen}
       onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+      orgHref={orgHrefFor}
       searchPlaceholder={org.searchPlaceholder}
       emptyText={org.emptyText}
     >
@@ -424,6 +449,7 @@ function MobileBar({
   const Sep = () => <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />;
   const [ref, hidden] = useHideOnScroll(scrollHide);
   const { setMobileOpen } = useSidebar();
+  const current = org.orgs.find((o) => o.slug === org.currentSlug);
   return (
     <div
       ref={ref}
@@ -434,7 +460,7 @@ function MobileBar({
         scrollHide && hidden && "-translate-y-full",
       )}
     >
-      <Avatar name={orgName} colorKey={org.currentSlug} size={24} className="shrink-0" />
+      <Avatar name={orgName} colorKey={org.currentSlug} color={current?.color} size={24} className="shrink-0" />
       <StagingChip />
       <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
         {org.orgs.length <= 1 ? (
@@ -445,6 +471,7 @@ function MobileBar({
             currentSlug={org.currentSlug}
             onOpen={org.onOpen}
             onSelect={(o) => { setMobileOpen(false); org.onSelect(o.slug); }}
+            orgHref={orgHrefFor}
             searchPlaceholder={org.searchPlaceholder}
             emptyText={org.emptyText}
           >
@@ -452,6 +479,9 @@ function MobileBar({
               {orgName ?? "TRF"}
             </button>
           </OrgSwitcher>
+        )}
+        {current?.tag && (
+          <OrgTag color={current.color} colorKey={org.currentSlug} name={orgName}>{current.tag}</OrgTag>
         )}
         <Sep />
         <span className="shrink-0 text-muted-foreground">{appLabel}</span>
@@ -827,7 +857,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           : Array.isArray((data as { organizations?: unknown })?.organizations)
             ? (data as { organizations: OrgOption[] }).organizations
             : [];
-        setOrgs(arr.map((o: OrgOption) => ({ id: o.id, name: o.name, slug: o.slug })));
+        setOrgs(arr.map((o: OrgOption) => ({ id: o.id, name: o.name, slug: o.slug, color: o.color, tag: o.tag })));
       })
       .catch((e) => { console.warn("[app-shell] org list fetch failed:", e); });
   }, [orgsApiBase]);
