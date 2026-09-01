@@ -7,6 +7,6 @@ export { useDocumentTitle, buildDocumentTitle } from "./title";
 export type { DocumentTitleParts } from "./title";
 export { useOrgLanding, rememberOrg, readLastOrg, readLastApp } from "./orgLanding";
 export type { OrgLandingStatus, OrgLandingOptions } from "./orgLanding";
-export { ShellCrumb, ShellCrumbsProvider, useShellCrumbs, ShellBarActions, ShellBarMeta } from "./crumbs";
+export { ShellCrumb, ShellCrumbsProvider, useShellCrumbs, ShellBarActions, ShellBarMeta, ShellBarUnpinned } from "./crumbs";
 export type { AppShellLayoutProps, ItemAction, TranslationLike } from "./AppShellLayout";
 export type { ShellCrumbEntry } from "./crumbs";

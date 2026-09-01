@@ -26,6 +26,10 @@ interface CrumbRegistry {
   /** Second bar row (status/meta) under the crumbs; ShellBarMeta portals into it. */
   metaEl: HTMLElement | null;
   setMetaEl: (el: HTMLElement | null) => void;
+  /** Pages that asked the desktop bar to scroll away; ShellBarUnpinned registers here. */
+  unpinnedIds: string[];
+  registerUnpinned: (id: string) => void;
+  unregisterUnpinned: (id: string) => void;
 }
 
 const ShellCrumbsContext = React.createContext<CrumbRegistry | null>(null);
@@ -50,9 +54,20 @@ export function ShellCrumbsProvider({ children }: { children: React.ReactNode })
     setCrumbs((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  const [unpinnedIds, setUnpinnedIds] = React.useState<string[]>([]);
+  const registerUnpinned = React.useCallback((id: string) => {
+    setUnpinnedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
+  const unregisterUnpinned = React.useCallback((id: string) => {
+    setUnpinnedIds((prev) => prev.filter((x) => x !== id));
+  }, []);
+
   const value = React.useMemo(
-    () => ({ crumbs, register, unregister, actionsEl, setActionsEl, metaEl, setMetaEl }),
-    [crumbs, register, unregister, actionsEl, metaEl],
+    () => ({
+      crumbs, register, unregister, actionsEl, setActionsEl, metaEl, setMetaEl,
+      unpinnedIds, registerUnpinned, unregisterUnpinned,
+    }),
+    [crumbs, register, unregister, actionsEl, metaEl, unpinnedIds, registerUnpinned, unregisterUnpinned],
   );
   return <ShellCrumbsContext.Provider value={value}>{children}</ShellCrumbsContext.Provider>;
 }
@@ -82,6 +97,33 @@ export function ShellBarMeta({ children }: { children: React.ReactNode }) {
   const ctx = React.useContext(ShellCrumbsContext);
   if (!ctx?.metaEl) return null;
   return createPortal(children, ctx.metaEl);
+}
+
+/** Internal: true while no mounted page has asked the desktop bar to scroll away. */
+export function useShellBarPinned(): boolean {
+  const ctx = React.useContext(ShellCrumbsContext);
+  return !ctx || ctx.unpinnedIds.length === 0;
+}
+
+/**
+ * Renders nothing; while mounted, the shell's desktop top bar scrolls away
+ * with the page instead of staying pinned. For pages where the bar carries no
+ * useful context and vertical space matters (e.g. full-page editors).
+ * No-op outside AppShellLayout.
+ */
+export function ShellBarUnpinned(): null {
+  const ctx = React.useContext(ShellCrumbsContext);
+  const registerUnpinned = ctx?.registerUnpinned;
+  const unregisterUnpinned = ctx?.unregisterUnpinned;
+  const id = React.useId();
+
+  React.useLayoutEffect(() => {
+    if (!registerUnpinned || !unregisterUnpinned) return;
+    registerUnpinned(id);
+    return () => unregisterUnpinned(id);
+  }, [registerUnpinned, unregisterUnpinned, id]);
+
+  return null;
 }
 
 /** The registered tail crumbs, in mount order. Empty outside the shell or when no page crumb is set. */
