@@ -325,8 +325,9 @@ function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, tokenBalan
   const subtitle = typeof tokenBalance === "number"
     ? `${tokenBalance.toLocaleString()} tokens`
     : appLabel;
+  // h-14 matches the desktop breadcrumb bar (min-h-14), so the two bottom borders line up.
   return (
-    <div className="flex w-full items-center gap-2 overflow-hidden px-4 py-3.5">
+    <div className="flex h-14 w-full items-center gap-2 overflow-hidden px-4">
       <Avatar name={orgName} colorKey={colorKey} color={color} size={28} className="shrink-0" />
       <div
         className={cn(
@@ -563,51 +564,69 @@ function DesktopBar({
   }, [pinned]);
 
   return (
-    <div ref={barRef} className={`${pinned ? "sticky top-0 " : ""}z-30 hidden shrink-0 flex-col border-b border-border bg-card md:flex`}>
-      <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
-        <StagingChip className="mr-1" />
-        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="shrink-0 text-muted-foreground">{appLabel}</span>
-          {section && (
-            <>
-              <Sep />
-              {/* Always a link: on the section's own page it navigates back to the
-                  bare list route, which doubles as a reset of search/filter params. */}
-              <button
-                type="button"
-                aria-current={crumbs.length === 0 ? "page" : undefined}
-                className={crumbs.length > 0
-                  ? crumbLink
-                  : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
-                onClick={onSection}
-              >
-                {section}
-              </button>
-            </>
-          )}
-          {crumbs.map((crumb, i) => {
-            const last = i === crumbs.length - 1;
-            return (
-              <React.Fragment key={`${i}-${crumb.label}`}>
+    <div ref={barRef} className={`${pinned ? "sticky top-0 " : ""}z-30 hidden shrink-0 flex-col bg-card md:flex`}>
+      {/* The border sits on its own wrapper so it falls outside the 56px row, the
+          same way SidebarHeader's border sits outside the brand's h-14: both come
+          out at 57px and their bottom borders line up. The row only grows if the
+          page's actions wrap on a narrow window. */}
+      <div className="border-b border-border">
+        <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
+          <StagingChip className="mr-1" />
+          <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+            {section && (
+              <>
                 <Sep />
-                {!last && crumb.href ? (
-                  <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
-                    {crumb.label}
-                  </button>
-                ) : (
-                  <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
-                    {crumb.label}
-                  </span>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </nav>
-        {/* ShellBarActions portal target; empty and invisible when unused. */}
-        <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+                {/* Always a link: on the section's own page it navigates back to the
+                    bare list route, which doubles as a reset of search/filter params. */}
+                <button
+                  type="button"
+                  aria-current={crumbs.length === 0 ? "page" : undefined}
+                  className={crumbs.length > 0
+                    ? crumbLink
+                    : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
+                  onClick={onSection}
+                >
+                  {section}
+                </button>
+              </>
+            )}
+            {crumbs.map((crumb, i) => {
+              const last = i === crumbs.length - 1;
+              return (
+                <React.Fragment key={`${i}-${crumb.label}`}>
+                  <Sep />
+                  {!last && crumb.href ? (
+                    <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
+                      {crumb.label}
+                    </span>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </nav>
+          {/* ShellBarActions portal target; empty and invisible when unused. */}
+          <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+        </div>
       </div>
-      {/* ShellBarMeta portal target: second row under the crumbs; collapses when empty. */}
-      <div ref={setMetaEl} className="flex flex-wrap items-center gap-3 px-6 pb-2.5 text-sm [&:empty]:hidden" />
+      {/* ShellBarMeta portal target: a pill (bg-sunken, ui2 >= v7.11.0) under the
+          bar rather than a second bar row, so the bar keeps its height. The row is
+          opaque page background because it stays pinned with the bar and content
+          scrolls under it.
+          4px padding keeps a leading or trailing badge concentric with the pill,
+          and px-5 plus that padding puts it on the page's 24px content edge. Plain
+          text at either end gets 8px more. Row and pill vanish when no page
+          publishes meta. */}
+      <div className="bg-background px-5 pb-2 pt-3 has-[>:empty]:hidden">
+        <div
+          ref={setMetaEl}
+          className="inline-flex max-w-full flex-wrap items-center gap-3 rounded-full bg-sunken p-1 text-sm [&:empty]:hidden [&>:first-child:not(.rounded-full)]:ml-2 [&>:last-child:not(.rounded-full)]:mr-2"
+        />
+      </div>
     </div>
   );
 }
