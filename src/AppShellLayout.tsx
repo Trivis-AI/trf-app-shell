@@ -279,6 +279,7 @@ const resolveDark = (c: ThemeChoice) => (c === "system" ? systemPrefersDark() : 
 // (no class); the others add a `theme-<value>` class on <html> — the palette tokens
 // shipped by @trf/ui2. Mirrors the trf-ui2 kitchen-sink theme picker.
 const PALETTE_OPTIONS: { value: string; label: string }[] = [
+  { value: "default", label: "Default" },
   { value: "trivis", label: "Trivis" },
   { value: "neutral", label: "Neutral" },
   { value: "amber", label: "Amber" },
@@ -292,10 +293,22 @@ const PALETTE_OPTIONS: { value: string; label: string }[] = [
 ];
 const PALETTE_VALUES = PALETTE_OPTIONS.map((p) => p.value);
 
+const isLocalhost = () => window.location.hostname === "localhost";
+
+// Localhost opens on Default (2026-10-01). The palette cookie is written back on
+// every load, so a stored "trivis" cannot tell a pick from the old fallback: until
+// this marker is set, localhost reads as Default once, and any pick after that
+// stands. A cookie, not localStorage: localhost cookies are shared across the
+// apps' ports, localStorage is not.
+const LOCAL_DEFAULT_MARKER = "trf-palette-default-v1";
+const hasLocalDefaultMarker = () =>
+  document.cookie.split("; ").some((c) => c.startsWith(`${LOCAL_DEFAULT_MARKER}=`));
+
 function readPalette(): string {
+  if (isLocalhost() && !hasLocalDefaultMarker()) return "default";
   const m = document.cookie.match(/(?:^|; )trf-palette=([^;]*)/);
   const v = m ? decodeURIComponent(m[1]) : localStorage.getItem("trf-palette");
-  return v && PALETTE_VALUES.includes(v) ? v : "trivis";
+  return v && PALETTE_VALUES.includes(v) ? v : isLocalhost() ? "default" : "trivis";
 }
 function writePalette(v: string): void {
   const parts = window.location.hostname.split(".");
@@ -844,6 +857,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     applyPalette(palette);
     writePalette(palette);
     localStorage.setItem("trf-palette", palette);
+    if (isLocalhost()) document.cookie = `${LOCAL_DEFAULT_MARKER}=1; path=/; max-age=31536000; samesite=lax`;
   }, [palette]);
 
   // Shed pre-cutover per-org cookies once, so the Cookie header stops growing with the
