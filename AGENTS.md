@@ -42,10 +42,11 @@ every consuming app loses its page actions, so treat them as public API.
 ## Known drift
 
 `trf-ui2-check` reports five raw `<button>` elements carrying their own classes in
-`AppShellLayout.tsx` (lines 351, 392, 436, 492, 510). They are shell chrome rather than page
+`AppShellLayout.tsx` (lines 391, 432, 479, 582, 600). They are shell chrome rather than page
 content, so replacing them with `Button` is a visual decision about the shell, not a mechanical
 cleanup. Leave them until Tom decides.
 
-This repo also pins `@trf/ui2` at v7.0.13 while the apps are on v7.0.45 or later. Worth a
-deliberate bump rather than a drive-by one, since the shell's chrome is the most visible surface
-in the suite.
+The `@trf/ui2` devDependency pin is only for local typechecking; apps bring their own ui2
+(the peer range is `*`). Since v0.39.0 the meta pill uses `bg-sunken`, a ui2 v7.11.0 token.
+Tailwind drops an unknown utility silently, so an app on an older ui2 gets a pill with no
+background: bump the ui2 and app-shell pins together.

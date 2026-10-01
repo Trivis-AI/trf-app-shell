@@ -23,7 +23,7 @@ interface CrumbRegistry {
   /** Right-side actions container of the desktop bar; ShellBarActions portals into it. */
   actionsEl: HTMLElement | null;
   setActionsEl: (el: HTMLElement | null) => void;
-  /** Second bar row (status/meta) under the crumbs; ShellBarMeta portals into it. */
+  /** The meta pill (status/meta) under the bar; ShellBarMeta portals into it. */
   metaEl: HTMLElement | null;
   setMetaEl: (el: HTMLElement | null) => void;
   /** Pages that asked the desktop bar to scroll away; ShellBarUnpinned registers here. */
@@ -90,8 +90,9 @@ export function ShellBarActions({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Portals its children into the second row of the shell's desktop bar, under
- * the breadcrumbs (status badges, meta text). Desktop-only, like ShellBarActions.
+ * Portals its children into a pill under the shell's desktop bar (status
+ * badges, meta text). Lead with the status badge: it sits concentric in the
+ * pill. Desktop-only, like ShellBarActions.
  */
 export function ShellBarMeta({ children }: { children: React.ReactNode }) {
   const ctx = React.useContext(ShellCrumbsContext);
