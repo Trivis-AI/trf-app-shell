@@ -225,7 +225,7 @@ const PLAN_REFRESH_MIN_MS = 60_000;
 // match a label exactly is silently dead and the row falls back to Circle. "items" was
 // dead for exactly that reason: the menu calls that group "Assets and warehouse".
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  "oto ai": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
+  "ai agent": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
   contracts: Signature, "assets and warehouse": CirclePile, tables: Table2, settings: Settings,
   personnel: Users,
@@ -236,6 +236,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   // "my account" is the pre-2026-08 label for the same portal group; keep it so a
   // browser holding an older cached menu still gets an icon rather than the fallback.
   audit: ClipboardCheck, organizations: Network, "my account": User, "my trivis": House,
+  // "Oto AI" is the pre-2026-10-04 label of the AI group, now "AI Agent"; same reason.
+  "oto ai": Sparkles,
 };
 
 const joinUrl = (base: string, path: string) =>
