@@ -5,7 +5,7 @@ import {
   Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
   Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
   Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette, User,
-  House, Users,
+  House, Users, Gauge,
 } from "lucide-react";
 import {
   AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
@@ -204,6 +204,22 @@ const ORG_SWITCHER_TEXTS: Record<string, { search: string; empty: string }> = {
   lt: { search: "Ieškoti organizacijos…", empty: "Organizacija nerasta." },
 };
 
+// The plan line under the org name: the plan, and this month's use of it.
+const PLAN_TEXTS: Record<string, { free: string; standard: string; premium: string; usage: string }> = {
+  en: { free: "Free", standard: "Standard", premium: "Premium", usage: "Usage" },
+  ee: { free: "Tasuta", standard: "Standard", premium: "Premium", usage: "Kasutus" },
+  lv: { free: "Bezmaksas", standard: "Standarta", premium: "Premium", usage: "Lietojums" },
+  lt: { free: "Nemokamas", standard: "Standartinis", premium: "Premium", usage: "Naudojimas" },
+};
+
+/** What the org header shows under the name: the plan, and the share of the plan's
+ *  monthly tokens used since the 1st (null when backlogin does not send usage). */
+type PlanLine = { plan: string; usedPct: number | null };
+
+// The plan line is refetched on window focus; switching tabs back and forth should not
+// cost a backlogin and trfservices round trip every time.
+const PLAN_REFRESH_MIN_MS = 60_000;
+
 // Keyed by the node's English label, lower-cased — not by id — so a key that does not
 // match a label exactly is silently dead and the row falls back to Circle. "items" was
 // dead for exactly that reason: the menu calls that group "Assets and warehouse".
@@ -331,13 +347,23 @@ function useLangVersion(): void {
   }, []);
 }
 
-function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, tokenBalance }: { orgName: string | null; appLabel: string; colorKey?: string; color?: string; tag?: string; tokenBalance?: number | null }) {
+function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, planLine, lang }: { orgName: string | null; appLabel: string; colorKey?: string; color?: string; tag?: string; planLine?: PlanLine | null; lang: string }) {
   const { collapsed } = useSidebar();
-  // Show the org's token balance under the name once loaded; fall back to the app
-  // label while loading / when unavailable.
-  const subtitle = typeof tokenBalance === "number"
-    ? `${tokenBalance.toLocaleString()} tokens`
-    : appLabel;
+  // Under the name: the plan and this month's use of it ("Standard  Usage 58%"), once
+  // loaded; the app label while loading or when billing does not answer.
+  const texts = PLAN_TEXTS[lang] ?? PLAN_TEXTS.en;
+  const planName = planLine ? (texts[planLine.plan as "free" | "standard" | "premium"] ?? planLine.plan) : null;
+  const subtitle = planLine ? (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="min-w-0 truncate">{planName}</span>
+      {planLine.usedPct != null && (
+        <>
+          <Gauge className="size-3.5 shrink-0" aria-hidden />
+          <span className="shrink-0 tabular-nums">{texts.usage} {planLine.usedPct}%</span>
+        </>
+      )}
+    </span>
+  ) : appLabel;
   // h-14 matches the desktop breadcrumb bar (min-h-14), so the two bottom borders line up.
   return (
     <div className="flex h-14 w-full items-center gap-2 overflow-hidden px-4">
@@ -374,7 +400,7 @@ interface OrgPickerProps {
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
 // tapping the org name opens the picker). The picker is ui2's OrgSwitcher: search
 // appears automatically past its threshold, type-to-filter + Enter switches.
-function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: string | null; appLabel: string; tokenBalance?: number | null } & OrgPickerProps) {
+function SidebarBrand({ orgName, appLabel, planLine, lang, ...org }: { orgName: string | null; appLabel: string; planLine?: PlanLine | null; lang: string } & OrgPickerProps) {
   const { setMobileOpen } = useSidebar();
   // The list arrives asynchronously, so before it lands there are no marks and the
   // brand renders exactly as it did before they existed.
@@ -386,7 +412,8 @@ function SidebarBrand({ orgName, appLabel, tokenBalance, ...org }: { orgName: st
       colorKey={org.currentSlug}
       color={current?.color}
       tag={current?.tag}
-      tokenBalance={tokenBalance}
+      planLine={planLine}
+      lang={lang}
     />
   );
   // Single org → nothing to switch to, so the brand is static (no dropdown).
@@ -815,7 +842,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const [themeChoice, setThemeChoice] = useState<ThemeChoice>(readThemeChoice);
   const [palette, setPalette] = useState<string>(readPalette);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
-  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+  const [planLine, setPlanLine] = useState<PlanLine | null>(null);
+  const planFetchedAt = useRef(0);
   const [query, setQuery] = useState("");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -902,32 +930,43 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return () => window.removeEventListener("focus", refreshOrgs);
   }, [refreshOrgs]);
 
-  // Token balance for the current org (shown under the org name on desktop). Same
+  // The plan line for the current org (shown under the org name on desktop): the plan
+  // and this month's use of its tokens, from backlogin's billing dashboard. Same
   // CORS-enabled login-api host as the org list; billing expects a `Bearer` header
-  // (not Authorization) carrying the org-scoped JWT. Refetch on focus + after a chat
-  // (trf:new-chat) since usage depletes the balance.
-  const refreshBalance = React.useCallback(() => {
-    if (!orgToken) { setTokenBalance(null); return; }
-    fetch(`${orgsApiBase}/v1/billing/balance`, {
+  // (not Authorization) carrying the org-scoped JWT. Refetched after a chat
+  // (trf:new-chat), since that is what uses tokens, and on focus at most once a minute.
+  const refreshPlanLine = React.useCallback((force = true) => {
+    if (!orgToken) { setPlanLine(null); return; }
+    if (!force && Date.now() - planFetchedAt.current < PLAN_REFRESH_MIN_MS) return;
+    planFetchedAt.current = Date.now();
+    fetch(`${orgsApiBase}/v1/billing/dashboard`, {
       credentials: "include",
       headers: { Bearer: orgToken },
     })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`balance ${r.status}`))))
-      .then((d: { balance?: number }) => {
-        setTokenBalance(typeof d?.balance === "number" ? d.balance : null);
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`dashboard ${r.status}`))))
+      .then((d: { package?: string; plan?: string; plan_tokens?: number; used_this_month?: number }) => {
+        const plan = d?.plan || d?.package;
+        if (!plan) { setPlanLine(null); return; }
+        // An older backlogin sends neither number: the plan alone, no percentage.
+        const usedPct = typeof d.used_this_month === "number" && typeof d.plan_tokens === "number" && d.plan_tokens > 0
+          ? Math.round((d.used_this_month / d.plan_tokens) * 100)
+          : null;
+        setPlanLine({ plan, usedPct });
       })
       .catch(() => { /* leave previous value; brand falls back to appLabel */ });
   }, [orgsApiBase, orgToken]);
 
   useEffect(() => {
-    refreshBalance();
-    window.addEventListener("focus", refreshBalance);
-    window.addEventListener("trf:new-chat", refreshBalance);
+    refreshPlanLine();
+    const onFocus = () => refreshPlanLine(false);
+    const onChat = () => refreshPlanLine();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("trf:new-chat", onChat);
     return () => {
-      window.removeEventListener("focus", refreshBalance);
-      window.removeEventListener("trf:new-chat", refreshBalance);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("trf:new-chat", onChat);
     };
-  }, [refreshBalance]);
+  }, [refreshPlanLine]);
 
   useEffect(() => {
     // When a slug is present the discovery menu is org-scoped, so wait for the org token to
@@ -1198,7 +1237,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} {...orgProps} />
       {/* Desktop brand (org picker). */}
       <SidebarHeader className="hidden md:flex">
-        <SidebarBrand orgName={orgName} appLabel={appLabel} tokenBalance={tokenBalance} {...orgProps} />
+        <SidebarBrand orgName={orgName} appLabel={appLabel} planLine={planLine} lang={lang} {...orgProps} />
       </SidebarHeader>
       <SidebarContent>
         <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} />
