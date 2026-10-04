@@ -36,7 +36,8 @@ too, which produced light tokens with dark-mode colours on top for anyone on a d
 
 **Way-finding.** Since v0.29.0 the desktop breadcrumb bar is rendered here, which is why doc 17
 §2 bans inline back links in pages: this repo provides the alternative. `ShellCrumb`,
-`ShellBarActions` and `ShellBarMeta` are the seams pages use. If you remove or rename them,
+`ShellBarActions` and `ShellBarMeta` are the seams pages use (plus `ShellBarUnpinned` and
+`ShellBarHidden`, which let the bar scroll away or drop it for a page). If you remove or rename them,
 every consuming app loses its page actions, so treat them as public API.
 
 ## Known drift

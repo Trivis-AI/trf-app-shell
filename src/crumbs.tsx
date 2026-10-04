@@ -27,9 +27,27 @@ interface CrumbRegistry {
   metaEl: HTMLElement | null;
   setMetaEl: (el: HTMLElement | null) => void;
   /** Pages that asked the desktop bar to scroll away; ShellBarUnpinned registers here. */
-  unpinnedIds: string[];
-  registerUnpinned: (id: string) => void;
-  unregisterUnpinned: (id: string) => void;
+  unpinned: IdSet;
+  /** Pages that asked for no desktop bar at all; ShellBarHidden registers here. */
+  hidden: IdSet;
+}
+
+/** The ids of the mounted pages holding a bar flag (unpinned, hidden). */
+interface IdSet {
+  ids: string[];
+  add: (id: string) => void;
+  remove: (id: string) => void;
+}
+
+function useIdSet(): IdSet {
+  const [ids, setIds] = React.useState<string[]>([]);
+  const add = React.useCallback((id: string) => {
+    setIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  }, []);
+  const remove = React.useCallback((id: string) => {
+    setIds((prev) => prev.filter((x) => x !== id));
+  }, []);
+  return React.useMemo(() => ({ ids, add, remove }), [ids, add, remove]);
 }
 
 const ShellCrumbsContext = React.createContext<CrumbRegistry | null>(null);
@@ -54,20 +72,12 @@ export function ShellCrumbsProvider({ children }: { children: React.ReactNode })
     setCrumbs((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  const [unpinnedIds, setUnpinnedIds] = React.useState<string[]>([]);
-  const registerUnpinned = React.useCallback((id: string) => {
-    setUnpinnedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-  }, []);
-  const unregisterUnpinned = React.useCallback((id: string) => {
-    setUnpinnedIds((prev) => prev.filter((x) => x !== id));
-  }, []);
+  const unpinned = useIdSet();
+  const hidden = useIdSet();
 
   const value = React.useMemo(
-    () => ({
-      crumbs, register, unregister, actionsEl, setActionsEl, metaEl, setMetaEl,
-      unpinnedIds, registerUnpinned, unregisterUnpinned,
-    }),
-    [crumbs, register, unregister, actionsEl, metaEl, unpinnedIds, registerUnpinned, unregisterUnpinned],
+    () => ({ crumbs, register, unregister, actionsEl, setActionsEl, metaEl, setMetaEl, unpinned, hidden }),
+    [crumbs, register, unregister, actionsEl, metaEl, unpinned, hidden],
   );
   return <ShellCrumbsContext.Provider value={value}>{children}</ShellCrumbsContext.Provider>;
 }
@@ -103,7 +113,25 @@ export function ShellBarMeta({ children }: { children: React.ReactNode }) {
 /** Internal: true while no mounted page has asked the desktop bar to scroll away. */
 export function useShellBarPinned(): boolean {
   const ctx = React.useContext(ShellCrumbsContext);
-  return !ctx || ctx.unpinnedIds.length === 0;
+  return !ctx || ctx.unpinned.ids.length === 0;
+}
+
+/** Internal: true while a mounted page has asked for no desktop bar. */
+export function useShellBarHidden(): boolean {
+  const ctx = React.useContext(ShellCrumbsContext);
+  return !!ctx && ctx.hidden.ids.length > 0;
+}
+
+// Holds the page's id in a bar flag set while the calling component is mounted.
+function useFlagWhileMounted(set: IdSet | undefined): void {
+  const add = set?.add;
+  const remove = set?.remove;
+  const id = React.useId();
+  React.useLayoutEffect(() => {
+    if (!add || !remove) return;
+    add(id);
+    return () => remove(id);
+  }, [add, remove, id]);
 }
 
 /**
@@ -113,17 +141,18 @@ export function useShellBarPinned(): boolean {
  * No-op outside AppShellLayout.
  */
 export function ShellBarUnpinned(): null {
-  const ctx = React.useContext(ShellCrumbsContext);
-  const registerUnpinned = ctx?.registerUnpinned;
-  const unregisterUnpinned = ctx?.unregisterUnpinned;
-  const id = React.useId();
+  useFlagWhileMounted(React.useContext(ShellCrumbsContext)?.unpinned);
+  return null;
+}
 
-  React.useLayoutEffect(() => {
-    if (!registerUnpinned || !unregisterUnpinned) return;
-    registerUnpinned(id);
-    return () => unregisterUnpinned(id);
-  }, [registerUnpinned, unregisterUnpinned, id]);
-
+/**
+ * Renders nothing; while mounted, the shell shows no desktop top bar (crumbs,
+ * ShellBarActions, ShellBarMeta) at all. For pages that need none of it, e.g. the
+ * AI chat. The mobile bar stays: it carries the menu toggle. No-op outside
+ * AppShellLayout.
+ */
+export function ShellBarHidden(): null {
+  useFlagWhileMounted(React.useContext(ShellCrumbsContext)?.hidden);
   return null;
 }
 

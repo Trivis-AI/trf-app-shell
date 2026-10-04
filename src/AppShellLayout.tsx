@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
-  Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Moon, Sun, Monitor, Circle,
-  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, Palette, User,
+  Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Circle,
+  Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, User,
   House, Users, Gauge,
 } from "lucide-react";
 import {
@@ -21,7 +21,8 @@ import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
 import { isStagingHost } from "./environment";
 import { useDocumentTitle } from "./title";
-import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots, useShellBarPinned } from "./crumbs";
+import { useColorMode, usePalette } from "./appearance";
+import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots, useShellBarPinned, useShellBarHidden } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
 /*
@@ -182,7 +183,7 @@ function MenuSearchBox({
         onKeyDown={onKeyDown}
         placeholder="Search…"
         aria-label="Search menu"
-        className="h-9 max-md:h-11 max-md:text-base"
+        className="h-9 bg-sidebar-field focus-visible:bg-sidebar-field-focus max-md:h-11 max-md:text-base"
       />
     </div>
   );
@@ -274,69 +275,6 @@ function apexFor(sub: string): string {
 const defaultLoginUrl = () => apexFor("login");      // user-facing portal
 const defaultLoginApiUrl = () => apexFor("login-api"); // CORS-enabled API
 
-// Theme is stored as a cookie on the apex domain (e.g. `.trf.is`) so the choice is
-// shared across every *.trf.is service — navigating AI → Purchase keeps the theme.
-type ThemeChoice = "light" | "dark" | "system";
-function readThemeChoice(): ThemeChoice {
-  const m = document.cookie.match(/(?:^|; )trf-theme=([^;]*)/);
-  const v = m ? decodeURIComponent(m[1]) : localStorage.getItem("trf-theme");
-  return v === "light" || v === "dark" || v === "system" ? v : "light";
-}
-function writeThemeChoice(v: ThemeChoice): void {
-  const parts = window.location.hostname.split(".");
-  const domain = parts.length >= 2 ? `; domain=.${parts.slice(-2).join(".")}` : "";
-  document.cookie = `trf-theme=${v}; path=/; max-age=31536000; samesite=lax${domain}`;
-}
-const systemPrefersDark = () =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-const resolveDark = (c: ThemeChoice) => (c === "system" ? systemPrefersDark() : c === "dark");
-
-// Color palette (independent of light/dark). "trivis" is the base brand palette
-// (no class); the others add a `theme-<value>` class on <html> — the palette tokens
-// shipped by @trf/ui2. Mirrors the trf-ui2 kitchen-sink theme picker.
-const PALETTE_OPTIONS: { value: string; label: string }[] = [
-  { value: "default", label: "Default" },
-  { value: "trivis", label: "Trivis" },
-  { value: "neutral", label: "Neutral" },
-  { value: "amber", label: "Amber" },
-  { value: "coffee", label: "Coffee" },
-  { value: "claude", label: "Claude" },
-  { value: "tangerine", label: "Tangerine" },
-  { value: "sky", label: "Sky" },
-  { value: "mars", label: "Mars" },
-  { value: "disco", label: "Disco" },
-  { value: "modern", label: "Modern" },
-];
-const PALETTE_VALUES = PALETTE_OPTIONS.map((p) => p.value);
-
-const isLocalhost = () => window.location.hostname === "localhost";
-
-// Localhost opens on Default (2026-10-01). The palette cookie is written back on
-// every load, so a stored "trivis" cannot tell a pick from the old fallback: until
-// this marker is set, localhost reads as Default once, and any pick after that
-// stands. A cookie, not localStorage: localhost cookies are shared across the
-// apps' ports, localStorage is not.
-const LOCAL_DEFAULT_MARKER = "trf-palette-default-v1";
-const hasLocalDefaultMarker = () =>
-  document.cookie.split("; ").some((c) => c.startsWith(`${LOCAL_DEFAULT_MARKER}=`));
-
-function readPalette(): string {
-  if (isLocalhost() && !hasLocalDefaultMarker()) return "default";
-  const m = document.cookie.match(/(?:^|; )trf-palette=([^;]*)/);
-  const v = m ? decodeURIComponent(m[1]) : localStorage.getItem("trf-palette");
-  return v && PALETTE_VALUES.includes(v) ? v : isLocalhost() ? "default" : "trivis";
-}
-function writePalette(v: string): void {
-  const parts = window.location.hostname.split(".");
-  const domain = parts.length >= 2 ? `; domain=.${parts.slice(-2).join(".")}` : "";
-  document.cookie = `trf-palette=${v}; path=/; max-age=31536000; samesite=lax${domain}`;
-}
-function applyPalette(v: string): void {
-  const el = document.documentElement;
-  [...el.classList].filter((c) => c.startsWith("theme-")).forEach((c) => el.classList.remove(c));
-  if (v && v !== "trivis") el.classList.add(`theme-${v}`);
-}
-
 /** Re-render when the language changes (TranslationClient.setLang dispatches this). */
 function useLangVersion(): void {
   const [, setV] = useState(0);
@@ -427,12 +365,31 @@ function SidebarBrand({ orgName, appLabel, planLine, lang, ...org }: { orgName: 
       orgHref={orgHrefFor}
       searchPlaceholder={org.searchPlaceholder}
       emptyText={org.emptyText}
+      // Open 4px into the header: just under the inset hover block, and over the top
+      // edge of the menu search, which starts right where the header ends.
+      sideOffset={-4}
     >
-      <button type="button" className="w-full hover:bg-muted transition-colors">
+      {/* The hover is a rounded block inset 8px from the button's edges; the button
+          itself keeps the header's full size. */}
+      <button
+        type="button"
+        className="relative isolate w-full before:absolute before:inset-2 before:-z-10 before:rounded-md before:transition-colors hover:before:bg-muted"
+      >
         {inner}
       </button>
     </OrgSwitcher>
   );
+}
+
+// Nearest ancestor that scrolls vertically (the SidebarInset for the top bars).
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  let sc = el?.parentElement ?? null;
+  while (sc) {
+    const oy = getComputedStyle(sc).overflowY;
+    if (oy === "auto" || oy === "scroll") return sc;
+    sc = sc.parentElement;
+  }
+  return null;
 }
 
 // Hide the top bar when scrolling down its scroll container, show it on scroll up.
@@ -442,14 +399,8 @@ function useHideOnScroll(enabled?: boolean): [React.RefObject<HTMLDivElement | n
   const [hidden, setHidden] = useState(false);
   useEffect(() => {
     if (!enabled) return;
-    let sc = ref.current?.parentElement ?? null;
-    while (sc) {
-      const oy = getComputedStyle(sc).overflowY;
-      if (oy === "auto" || oy === "scroll") break;
-      sc = sc.parentElement;
-    }
-    if (!sc) return;
-    const target = sc;
+    const target = scrollParent(ref.current);
+    if (!target) return;
     let last = target.scrollTop;
     const onScroll = () => {
       const y = target.scrollTop;
@@ -462,6 +413,33 @@ function useHideOnScroll(enabled?: boolean): [React.RefObject<HTMLDivElement | n
     return () => target.removeEventListener("scroll", onScroll);
   }, [enabled]);
   return [ref, hidden];
+}
+
+// Whether content has scrolled under the bar, for its shadow. That is the inset itself
+// scrolling, or a page's own scroll box sitting flush under the bar (AI chat's message
+// list). Scroll events don't bubble, so the inset listens in the capture phase.
+function useScrolledUnder(ref: React.RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [scrolled, setScrolled] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const bar = ref.current;
+    const inset = enabled ? scrollParent(bar) : null;
+    if (!bar || !inset) {
+      setScrolled(false);
+      return;
+    }
+    setScrolled(inset.scrollTop > 0);
+    const onScroll = (e: Event) => {
+      const t = e.target;
+      if (t === inset) return setScrolled(inset.scrollTop > 0);
+      if (!(t instanceof HTMLElement)) return;
+      if (Math.abs(t.getBoundingClientRect().top - bar.getBoundingClientRect().bottom) > 1) return;
+      setScrolled(inset.scrollTop > 0 || t.scrollTop > 0);
+    };
+    inset.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => inset.removeEventListener("scroll", onScroll, { capture: true });
+  }, [ref, enabled, pathname]);
+  return scrolled;
 }
 
 // The single menu toggle (☰ when closed, ✕ when open). Living in the breadcrumb bar
@@ -574,9 +552,15 @@ function DocumentTitle({ orgName, path }: { orgName: string | null; path: string
   return null;
 }
 
-function DesktopBar({
-  appLabel, section, onSection,
-}: { appLabel: string; section: string | null; onSection: () => void }) {
+type DesktopBarProps = { appLabel: string; section: string | null; onSection: () => void };
+
+// The desktop bar, unless the page asked for none (ShellBarHidden). Its own component
+// so the check runs inside ShellCrumbsProvider.
+function DesktopBarUnlessHidden(props: DesktopBarProps) {
+  return useShellBarHidden() ? null : <DesktopBar {...props} />;
+}
+
+function DesktopBar({ appLabel, section, onSection }: DesktopBarProps) {
   const crumbs = useShellCrumbs();
   const { setActionsEl, setMetaEl } = useShellBarSlots();
   const pinned = useShellBarPinned();
@@ -602,56 +586,63 @@ function DesktopBar({
       document.documentElement.style.removeProperty("--trf-topbar-h");
     };
   }, [pinned]);
+  const scrolled = useScrolledUnder(barRef, pinned);
 
   return (
-    <div ref={barRef} className={`${pinned ? "sticky top-0 " : ""}z-30 hidden shrink-0 flex-col bg-card md:flex`}>
-      {/* The border sits on its own wrapper so it falls outside the 56px row, the
-          same way SidebarHeader's border sits outside the brand's h-14: both come
-          out at 57px and their bottom borders line up. The row only grows if the
-          page's actions wrap on a narrow window. */}
-      <div className="border-b border-border">
-        <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
-          <StagingChip className="mr-1" />
-          <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="shrink-0 text-muted-foreground">{appLabel}</span>
-            {section && (
-              <>
+    <div
+      ref={barRef}
+      className={cn(
+        "z-30 hidden shrink-0 flex-col bg-card transition-shadow duration-200 md:flex",
+        // With the meta pill showing, keep the page's content off it: a margin, so it
+        // scrolls away instead of making the pinned bar taller.
+        "has-[[data-shell-meta]:not(:empty)]:mb-4",
+        pinned && "sticky top-0",
+        scrolled && "shadow-md",
+      )}
+    >
+      {/* No bottom border, like the sidebar's brand header beside it: both are
+          56px tall. The row only grows if the page's actions wrap on a narrow window. */}
+      <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
+        <StagingChip className="mr-1" />
+        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground">{appLabel}</span>
+          {section && (
+            <>
+              <Sep />
+              {/* Always a link: on the section's own page it navigates back to the
+                  bare list route, which doubles as a reset of search/filter params. */}
+              <button
+                type="button"
+                aria-current={crumbs.length === 0 ? "page" : undefined}
+                className={crumbs.length > 0
+                  ? crumbLink
+                  : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
+                onClick={onSection}
+              >
+                {section}
+              </button>
+            </>
+          )}
+          {crumbs.map((crumb, i) => {
+            const last = i === crumbs.length - 1;
+            return (
+              <React.Fragment key={`${i}-${crumb.label}`}>
                 <Sep />
-                {/* Always a link: on the section's own page it navigates back to the
-                    bare list route, which doubles as a reset of search/filter params. */}
-                <button
-                  type="button"
-                  aria-current={crumbs.length === 0 ? "page" : undefined}
-                  className={crumbs.length > 0
-                    ? crumbLink
-                    : "min-w-0 truncate font-medium outline-none transition-opacity hover:opacity-70"}
-                  onClick={onSection}
-                >
-                  {section}
-                </button>
-              </>
-            )}
-            {crumbs.map((crumb, i) => {
-              const last = i === crumbs.length - 1;
-              return (
-                <React.Fragment key={`${i}-${crumb.label}`}>
-                  <Sep />
-                  {!last && crumb.href ? (
-                    <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
-                      {crumb.label}
-                    </button>
-                  ) : (
-                    <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
-                      {crumb.label}
-                    </span>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </nav>
-          {/* ShellBarActions portal target; empty and invisible when unused. */}
-          <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
-        </div>
+                {!last && crumb.href ? (
+                  <button type="button" className={crumbLink} onClick={() => navigate(crumb.href!)}>
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span aria-current={last ? "page" : undefined} className="min-w-0 truncate font-medium">
+                    {crumb.label}
+                  </span>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </nav>
+        {/* ShellBarActions portal target; empty and invisible when unused. */}
+        <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
       </div>
       {/* ShellBarMeta portal target: a pill (bg-sunken, ui2 >= v7.11.0) under the
           bar rather than a second bar row, so the bar keeps its height. The row is
@@ -659,11 +650,13 @@ function DesktopBar({
           scrolls under it.
           4px padding keeps a leading or trailing badge concentric with the pill,
           and px-5 plus that padding puts it on the page's 24px content edge. Plain
-          text at either end gets 8px more. Row and pill vanish when no page
-          publishes meta. */}
-      <div className="bg-background px-5 pb-2 pt-3 has-[>:empty]:hidden">
+          text at either end gets 8px more. 4px on top puts the 28px pill's centre level
+          with the sidebar search beside it (56px header + 18px). Row and pill vanish
+          when no page publishes meta. */}
+      <div className="bg-background px-5 pb-2 pt-1 has-[>:empty]:hidden">
         <div
           ref={setMetaEl}
+          data-shell-meta
           className="inline-flex max-w-full flex-wrap items-center gap-3 rounded-full bg-sunken p-1 text-sm [&:empty]:hidden [&>:first-child:not(.rounded-full)]:ml-2 [&>:last-child:not(.rounded-full)]:mr-2"
         />
       </div>
@@ -748,87 +741,6 @@ function LogoutButton({ loginUrl }: { loginUrl: string }) {
   );
 }
 
-const THEME_OPTIONS: { value: ThemeChoice; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
-  { value: "system", label: "System", Icon: Monitor },
-];
-
-function ThemeSelect({ choice, onChange }: { choice: ThemeChoice; onChange: (c: ThemeChoice) => void }) {
-  const { collapsed } = useSidebar();
-  const TriggerIcon = choice === "dark" ? Moon : choice === "system" ? Monitor : Sun;
-  return (
-    <div
-      className={cn(
-        "flex items-center overflow-hidden transition-[max-width,opacity] duration-200",
-        collapsed ? "max-w-0 opacity-0" : "max-w-[60px] opacity-100",
-      )}
-    >
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Theme"
-          title="Theme"
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4 max-md:size-10 max-md:[&_svg]:size-5"
-        >
-          <TriggerIcon />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-40">
-          {THEME_OPTIONS.map(({ value, label, Icon }) => (
-            <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
-              <Check className={cn("mr-2 size-4 shrink-0", value === choice ? "opacity-100" : "opacity-0")} />
-              <Icon className="mr-2 size-4 shrink-0" />
-              <span>{label}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
-// Four token swatches rendered under a palette's class, so each row previews THAT
-// palette's colors (recreates the trf-ui2 kitchen-sink theme picker).
-function PaletteSwatches({ palette }: { palette: string }) {
-  return (
-    <span className={cn("flex shrink-0 items-center gap-0.5", palette !== "trivis" && `theme-${palette}`)}>
-      {["bg-primary", "bg-secondary", "bg-accent", "bg-muted"].map((c) => (
-        <span key={c} className={cn("size-3 rounded-full ring-1 ring-black/10 dark:ring-white/20", c)} />
-      ))}
-    </span>
-  );
-}
-
-function PaletteSelect({ palette, onChange }: { palette: string; onChange: (p: string) => void }) {
-  const { collapsed } = useSidebar();
-  return (
-    <div
-      className={cn(
-        "flex items-center overflow-hidden transition-[max-width,opacity] duration-200",
-        collapsed ? "max-w-0 opacity-0" : "max-w-[60px] opacity-100",
-      )}
-    >
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Color palette"
-          title="Color palette"
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4 max-md:size-10 max-md:[&_svg]:size-5"
-        >
-          <Palette />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-44">
-          {PALETTE_OPTIONS.map(({ value, label }) => (
-            <DropdownMenuItem key={value} onSelect={() => onChange(value)}>
-              <Check className={cn("mr-2 size-4 shrink-0", value === palette ? "opacity-100" : "opacity-0")} />
-              <PaletteSwatches palette={value} />
-              <span className="ml-2">{label}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-
 export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
   useThemeFavicon();
@@ -839,14 +751,17 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const [items, setItems] = useState<MenuItem[]>([]);
   const [baseUrls, setBaseUrls] = useState<AppBaseUrls>({});
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(readThemeChoice);
-  const [palette, setPalette] = useState<string>(readPalette);
+  // Apply and store the palette and light/dark; both are picked in User settings › Appearance.
+  usePalette();
+  useColorMode();
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
   const [planLine, setPlanLine] = useState<PlanLine | null>(null);
   const planFetchedAt = useRef(0);
   const [query, setQuery] = useState("");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  // The menu has scrolled under the brand header: shadow it, like the top bar.
+  const [menuScrolled, setMenuScrolled] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   // Reactive org token for the current slug (minted on demand, cached per tab). Drives the
   // org name + token balance so they appear once the mint lands, instead of a stale sync
@@ -866,27 +781,6 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const orgsApiBase = orgsApiUrl ?? defaultLoginApiUrl();
 
   const label = (item: MenuItem) => item.labels?.[lang] ?? item.labels?.en ?? item.label;
-
-  // Apply theme; persist the choice to the apex cookie; follow the OS live in "system".
-  useEffect(() => {
-    const apply = () => document.documentElement.classList.toggle("dark", resolveDark(themeChoice));
-    apply();
-    writeThemeChoice(themeChoice);
-    localStorage.setItem("trf-theme", themeChoice);
-    if (themeChoice === "system") {
-      const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      mq.addEventListener("change", apply);
-      return () => mq.removeEventListener("change", apply);
-    }
-  }, [themeChoice]);
-
-  // Apply the color palette and persist it to the apex cookie (shared across apps).
-  useEffect(() => {
-    applyPalette(palette);
-    writePalette(palette);
-    localStorage.setItem("trf-palette", palette);
-    if (isLocalhost()) document.cookie = `${LOCAL_DEFAULT_MARKER}=1; path=/; max-age=31536000; samesite=lax`;
-  }, [palette]);
 
   // Shed pre-cutover per-org cookies once, so the Cookie header stops growing with the
   // number of accessible orgs. Org tokens now live in the per-tab cache.
@@ -1236,10 +1130,17 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       {/* Mobile drawer header: the same breadcrumb bar as the closed top bar. */}
       <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} {...orgProps} />
       {/* Desktop brand (org picker). */}
-      <SidebarHeader className="hidden md:flex">
+      {/* relative z-10 so its shadow paints over the menu rows scrolling below it. */}
+      <SidebarHeader
+        className={cn(
+          "relative z-10 hidden border-b-0 transition-shadow duration-200 md:flex",
+          menuScrolled && "shadow-md",
+        )}
+      >
         <SidebarBrand orgName={orgName} appLabel={appLabel} planLine={planLine} lang={lang} {...orgProps} />
       </SidebarHeader>
-      <SidebarContent>
+      {/* No top padding: the search sits right under the brand header. */}
+      <SidebarContent className="pt-0" onScroll={(e) => setMenuScrolled(e.currentTarget.scrollTop > 0)}>
         <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} />
         {query.trim() ? (
           <div ref={resultsRef}>
@@ -1281,8 +1182,6 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       </SidebarContent>
       <SidebarFooter className="max-md:min-h-14 max-md:justify-around max-md:px-3">
         <LanguageSelect translation={translation} />
-        <ThemeSelect choice={themeChoice} onChange={setThemeChoice} />
-        <PaletteSelect palette={palette} onChange={setPalette} />
         <LogoutButton loginUrl={portalBase} />
         <SidebarTrigger />
       </SidebarFooter>
@@ -1298,7 +1197,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
         <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
         {topBar && (
-          <DesktopBar
+          <DesktopBarUnlessHidden
             appLabel={appLabel}
             section={sectionLeaf ? label(sectionLeaf) : null}
             onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
