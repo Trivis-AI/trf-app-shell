@@ -51,3 +51,9 @@ The `@trf/ui2` devDependency pin is only for local typechecking; apps bring thei
 (the peer range is `*`). Since v0.39.0 the meta pill uses `bg-sunken`, a ui2 v7.11.0 token.
 Tailwind drops an unknown utility silently, so an app on an older ui2 gets a pill with no
 background: bump the ui2 and app-shell pins together.
+
+## Working in parallel (adopted 2026-10-20)
+Feature work happens in a task worktree, not in this primary checkout: `claude -w t<task>-<slug>` or
+`../documentation/tools/wt.sh new <repo> <name>`. Land from the worktree: `git fetch origin && git rebase
+origin/main && <build> && git push origin HEAD:main`, tag from there, prod via `git push origin
+origin/main:trivis`. Never force-push main or trivis. Rules and setup: `../documentation/PARALLEL-WORK.md`.
