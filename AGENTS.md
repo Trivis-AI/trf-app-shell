@@ -81,6 +81,15 @@ unless the person changed the menu by hand meanwhile; it reads the menu's real w
 7.23.0's `useSidebar().width`, which is user-adjustable there. Tests: `node --test
 src/panel/protocol.test.ts src/panel/pageEntity.test.ts`.
 
+## Appearance and the first paint
+
+`src/appearance.ts` owns light, dark, system and the palette: cookies `trf-theme`, `trf-palette`
+and the `trf-palette-default-v1` marker on the apex, applied as `dark` and `theme-<palette>`
+classes on `<html>`. Every app's `index.html` carries an inline `<head>` script that reads the
+same cookies and sets the same classes before the first paint, so a cross-app load does not
+flash light (`documentation/FRONTEND-MAP.md`, "Theme before the first paint"). If the cookie
+names, values or classes change here, that snippet changes in every app too.
+
 ## Known drift
 
 `trf-ui2-check` reports five raw `<button>` elements carrying their own classes in
