@@ -787,11 +787,12 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   }, [orgToken, orgs, slug]);
   const lang = translation.getLang();
   // The AI panel: frontai in an iframe beside the page (src/panel). Not in the AI app
-  // itself, nor in the login app.
+  // itself, nor in the login app. Discovery keys `base_urls` by service definition
+  // (`ai-ui`, `purchase-ui`), not by app id; without the entry there is no button.
   const ai = useAiPanel({
     slug,
     orgToken,
-    panelBase: baseUrls.ai ?? null,
+    panelBase: baseUrls["ai-ui"] ?? null,
     lang,
     colorMode,
     palette,
