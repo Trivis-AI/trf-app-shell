@@ -40,6 +40,23 @@ too, which produced light tokens with dark-mode colours on top for anyone on a d
 `ShellBarHidden`, which let the bar scroll away or drop it for a page). If you remove or rename them,
 every consuming app loses its page actions, so treat them as public API.
 
+## Live changes (src/live)
+
+The shell keeps one server-sent-events stream per tab to the discovery service
+(`GET /v1/changes/stream` on services), which forwards the organisation's audit events as change
+identities: service, entity type, entity id, action, and the writer's relation to this person
+(self, agent, other). No values. `LiveChangesProvider` is mounted around `{children}` in
+`AppShellLayout` with the renewing org token; pages call `useLiveChanges({ entityTypes, onChange })`
+and refetch what they show, and announce their own writes with `markOwnWrite(entityType, id)`
+before sending them so those refresh without the "changed elsewhere" glow. The glow itself is the
+design system's (`ServerDataTable` `liveChange` prop, `useChangeHighlight`).
+
+Behaviour to keep: `ready` and `resync` ask every registration to refetch once; a batch is at most
+one delivery per 500 ms per registration; 45 s without a message (heartbeats come every 25 s)
+reconnects; `expired` reconnects when the token hook delivers a new one; 401/403/404/503 retry once a
+minute, other failures with a 1 s to 30 s backoff. The pure parts (SSE parser, own-write window,
+coalescer, backoff) are in `src/live/core.ts` with node tests: `node --test src/live/core.test.ts`.
+
 ## Known drift
 
 `trf-ui2-check` reports five raw `<button>` elements carrying their own classes in

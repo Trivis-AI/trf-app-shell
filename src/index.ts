@@ -11,4 +11,8 @@ export { ShellCrumb, ShellCrumbsProvider, useShellCrumbs, ShellBarActions, Shell
 export type { AppShellLayoutProps, ItemAction, TranslationLike } from "./AppShellLayout";
 export type { ShellCrumbEntry } from "./crumbs";
 export { PALETTE_OPTIONS, COLOR_MODES, usePalette, useColorMode } from "./appearance";
+// Live changes: one stream per tab from the discovery service; pages register
+// what they show and refetch when it changed elsewhere. See src/live.
+export { LiveChangesProvider, useLiveChanges, useLiveChangesStatus, markOwnWrite, servicesApiBase } from "./live/liveChanges";
+export type { LiveStatus, UseLiveChangesOptions, LiveChangesProviderProps, LiveChangeBatch, LiveChangeEvent, LiveRefreshReason, LiveActor } from "./live/liveChanges";
 export type { ColorMode } from "./appearance";

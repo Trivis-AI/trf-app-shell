@@ -16,6 +16,7 @@ import {
   Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher, OrgTag,
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
+import { LiveChangesProvider } from "./live/liveChanges";
 import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
@@ -1205,7 +1206,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
             onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
           />
         )}
-        {children}
+        <LiveChangesProvider token={orgToken}>{children}</LiveChangesProvider>
       </AppShell>
 
       {/* ⌘K command palette — shares the same flatten/match core as the inline box. */}
