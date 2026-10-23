@@ -74,8 +74,12 @@ against its own token's account and org ids and sends nothing to a panel that do
 After `ready`, and on every route change, the host posts `context`: the app id, the route without
 the `/app/:slug` prefix and the entity the route names (`pageEntity.ts`, a per-app table of id
 positions, UUID or number only), with a version that only grows; the panel's starter chips follow
-it (`documentation/AI-PANEL-ACTIONS.md`). Tests: `node --test src/panel/protocol.test.ts
-src/panel/pageEntity.test.ts`.
+it (`documentation/AI-PANEL-ACTIONS.md`). `PanelMenuFit` (inside the SidebarProvider) collapses the
+left menu to its rail when the docked panel would push the page under 720 px, remembers that in
+the cookie's third field (`open.width.menu`) and expands the menu again when the panel closes,
+unless the person changed the menu by hand meanwhile; it reads the menu's real width from ui2
+7.23.0's `useSidebar().width`, which is user-adjustable there. Tests: `node --test
+src/panel/protocol.test.ts src/panel/pageEntity.test.ts`.
 
 ## Known drift
 

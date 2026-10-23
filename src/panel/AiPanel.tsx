@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { Button, cn } from "@trf/ui2";
+import { Button, cn, useSidebar } from "@trf/ui2";
 import type { ColorMode } from "../appearance";
 import {
   aiPanelPath,
@@ -16,6 +16,7 @@ import {
 import { pageEntityFromPath, pagePath } from "./pageEntity";
 import {
   EXPAND_OVERSHOOT,
+  PAGE_MIN_WIDTH,
   PANEL_MIN_WIDTH,
   SNAP_CLOSE_WIDTH,
   clampPanelWidth,
@@ -79,6 +80,9 @@ export interface AiPanel {
     iframeRef: React.RefObject<HTMLIFrameElement | null>;
     buttonRef: React.RefObject<HTMLButtonElement | null>;
     startDrag: (e: React.PointerEvent) => void;
+    /** Whether the panel collapsed the left menu (PanelMenuFit). */
+    menuCollapsed: boolean;
+    setMenuCollapsed: (v: boolean) => void;
   };
 }
 
@@ -110,6 +114,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   const initial = useMemo(readPanelState, []);
   const [open, setOpenState] = useState(enabled && initial.open);
   const [width, setWidth] = useState(initial.width);
+  const [menuCollapsed, setMenuCollapsed] = useState(initial.menuCollapsed);
   const [expanded, setExpanded] = useState(false);
   const [unread, setUnread] = useState(false);
   const [mounted, setMounted] = useState(enabled && initial.open);
@@ -287,8 +292,8 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
 
   useEffect(() => {
     if (!enabled) return;
-    writePanelState({ open, width });
-  }, [enabled, open, width]);
+    writePanelState({ open, width, menuCollapsed });
+  }, [enabled, open, width, menuCollapsed]);
 
   // ⌘J / Ctrl-J toggles the panel. Inside the iframe the panel forwards the same key.
   useEffect(() => {
@@ -353,8 +358,45 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     toggle,
     setOpen,
     setExpanded,
-    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag },
+    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag, menuCollapsed, setMenuCollapsed },
   };
+}
+
+/**
+ * Decision 1 of the panel plan: the docked panel pushes the page, and when the page would drop
+ * under PAGE_MIN_WIDTH the left menu collapses to its rail (item 8: the threshold is the page,
+ * not the viewport). The panel remembers that it did so in the third field of its state cookie,
+ * so an app switch keeps the memory, and expands the menu again when it closes, unless the
+ * person changed the menu themselves meanwhile. Renders nothing; lives inside SidebarProvider.
+ */
+export function PanelMenuFit({ ai }: { ai: AiPanel }) {
+  const { collapsed, setCollapsed, width: menuWidth } = useSidebar();
+  const [viewport, setViewport] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setViewport(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const docked = ai.enabled && ai.open && !ai.expanded;
+  const { menuCollapsed, setMenuCollapsed } = ai._;
+  // Read in the effect, not listed as a dependency: a menu the person reopens by hand while the
+  // panel is docked stays open; only the panel's own changes (open, width) and the viewport fit again.
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  useEffect(() => {
+    if (docked) {
+      // Older ui2 has no adjustable width; treat it as the default and let the page decide.
+      const menu = typeof menuWidth === "number" ? menuWidth : 256;
+      if (!collapsedRef.current && viewport - menu - ai.width < PAGE_MIN_WIDTH) {
+        setCollapsed(true);
+        setMenuCollapsed(true);
+      }
+    } else if (menuCollapsed) {
+      setMenuCollapsed(false);
+      if (collapsedRef.current) setCollapsed(false);
+    }
+  }, [docked, ai.width, viewport, menuWidth, menuCollapsed, setCollapsed, setMenuCollapsed]);
+  return null;
 }
 
 /** The AI button for the shell's top bar: toggles the panel, shows the unread dot. */

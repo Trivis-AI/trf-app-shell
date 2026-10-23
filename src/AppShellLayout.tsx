@@ -17,7 +17,7 @@ import {
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { LiveChangesProvider } from "./live/liveChanges";
-import { useAiPanel, AiPanelButton, AiPanelFrame } from "./panel/AiPanel";
+import { useAiPanel, AiPanelButton, AiPanelFrame, PanelMenuFit } from "./panel/AiPanel";
 import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
@@ -1221,6 +1221,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           sibling of the inset: sidebar, page, panel in one row. The panel pushes the page;
           in big chat the page keeps its state at zero width. */}
       <SidebarProvider openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
+        <PanelMenuFit ai={ai} />
         <div className="flex h-dvh w-full overflow-hidden">
           {sidebar}
           <SidebarInset className={ai.expanded ? "w-0 flex-none overflow-hidden" : undefined}>

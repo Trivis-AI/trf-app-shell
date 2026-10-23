@@ -22,6 +22,8 @@ export const EXPAND_OVERSHOOT = 80;
 export interface PanelState {
   open: boolean;
   width: number;
+  /** The panel collapsed the left menu to make room; it expands it again when it closes. */
+  menuCollapsed: boolean;
 }
 
 /** The widest the panel may dock at in this viewport; below PANEL_MIN_WIDTH it cannot dock. */
@@ -35,18 +37,21 @@ export function clampPanelWidth(width: number, viewportWidth: number): number {
 }
 
 export function readPanelState(): PanelState {
-  if (typeof document === "undefined") return { open: false, width: PANEL_DEFAULT_WIDTH };
+  const closed: PanelState = { open: false, width: PANEL_DEFAULT_WIDTH, menuCollapsed: false };
+  if (typeof document === "undefined") return closed;
   const m = document.cookie.match(/(?:^|; )trf-ai-panel=([^;]*)/);
-  if (!m) return { open: false, width: PANEL_DEFAULT_WIDTH };
-  const [open, width] = decodeURIComponent(m[1]).split(".");
+  if (!m) return closed;
+  // `open.width.menu`; the third field arrived with the menu auto-collapse and may be absent.
+  const [open, width, menu] = decodeURIComponent(m[1]).split(".");
   const w = Number(width);
   return {
     open: open === "1",
     width: Number.isFinite(w) && w >= PANEL_MIN_WIDTH && w <= PANEL_MAX_WIDTH ? w : PANEL_DEFAULT_WIDTH,
+    menuCollapsed: menu === "1",
   };
 }
 
 export function writePanelState(s: PanelState): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${COOKIE}=${s.open ? 1 : 0}.${Math.round(s.width)}${cookieAttrs()}`;
+  document.cookie = `${COOKIE}=${s.open ? 1 : 0}.${Math.round(s.width)}.${s.menuCollapsed ? 1 : 0}${cookieAttrs()}`;
 }
