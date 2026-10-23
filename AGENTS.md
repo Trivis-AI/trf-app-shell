@@ -57,6 +57,21 @@ reconnects; `expired` reconnects when the token hook delivers a new one; 401/403
 minute, other failures with a 1 s to 30 s backoff. The pure parts (SSE parser, own-write window,
 coalescer, backoff) are in `src/live/core.ts` with node tests: `node --test src/live/core.test.ts`.
 
+## The AI panel (src/panel)
+
+frontai's `/app/:slug/panel` route in an iframe docked at the right of the shell, pushing the
+page; the AI app itself and the login app get no panel. Plan and contracts:
+`documentation/AI-SIDEPANEL-PLAN.md` (sections 3, 4 and track 2 of section 6). `protocol.ts` is
+the wire shape both sides import (frontai through this package): marker, version, connection id
+minted by the host on every iframe load, `init` and `ready` handshake, no credential on the
+bridge. `AiPanel.tsx` holds the hook, the button (top bar, after the page's actions, ⌘J) and the
+frame (width animates like the sidebar, iframe anchored right, drag handle with a shield, snap
+closed under 280 px, big chat past the maximum). `panelState.ts` keeps open and width in the apex
+cookie `trf-ai-panel`. The panel URL comes from discovery `base_urls.ai`; `VITE_AI_PANEL_URL`
+overrides it in local development. The host checks the panel's `ready` against its own token's
+account and org ids and sends nothing to a panel that does not match. Tests:
+`node --test src/panel/protocol.test.ts`.
+
 ## Known drift
 
 `trf-ui2-check` reports five raw `<button>` elements carrying their own classes in

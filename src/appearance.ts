@@ -27,7 +27,8 @@ const DEFAULT_MARKER = "trf-palette-default-v1";
 const hasDefaultMarker = () =>
   document.cookie.split("; ").some((c) => c.startsWith(`${DEFAULT_MARKER}=`));
 
-function cookieAttrs(): string {
+/** Attributes for a preference cookie shared by every app on the apex (every port on localhost). */
+export function cookieAttrs(): string {
   const parts = window.location.hostname.split(".");
   const domain = parts.length >= 2 ? `; domain=.${parts.slice(-2).join(".")}` : "";
   return `; path=/; max-age=31536000; samesite=lax${domain}`;

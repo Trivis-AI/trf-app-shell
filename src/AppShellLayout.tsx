@@ -8,7 +8,7 @@ import {
   House, Users, Gauge,
 } from "lucide-react";
 import {
-  AppShell, Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
+  Sidebar, SidebarProvider, SidebarInset, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
   SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarTrigger, useSidebar,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
@@ -17,6 +17,7 @@ import {
 } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { LiveChangesProvider } from "./live/liveChanges";
+import { useAiPanel, AiPanelButton, AiPanelFrame } from "./panel/AiPanel";
 import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
@@ -555,7 +556,7 @@ function DocumentTitle({ orgName, path }: { orgName: string | null; path: string
   return null;
 }
 
-type DesktopBarProps = { appLabel: string; section: string | null; onSection: () => void };
+type DesktopBarProps = { appLabel: string; section: string | null; onSection: () => void; trailing?: React.ReactNode };
 
 // The desktop bar, unless the page asked for none (ShellBarHidden). Its own component
 // so the check runs inside ShellCrumbsProvider.
@@ -563,7 +564,7 @@ function DesktopBarUnlessHidden(props: DesktopBarProps) {
   return useShellBarHidden() ? null : <DesktopBar {...props} />;
 }
 
-function DesktopBar({ appLabel, section, onSection }: DesktopBarProps) {
+function DesktopBar({ appLabel, section, onSection, trailing }: DesktopBarProps) {
   const crumbs = useShellCrumbs();
   const { setActionsEl, setMetaEl } = useShellBarSlots();
   const pinned = useShellBarPinned();
@@ -644,8 +645,12 @@ function DesktopBar({ appLabel, section, onSection }: DesktopBarProps) {
             );
           })}
         </nav>
-        {/* ShellBarActions portal target; empty and invisible when unused. */}
-        <div ref={setActionsEl} className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* ShellBarActions portal target; empty and invisible when unused. */}
+          <div ref={setActionsEl} className="flex shrink-0 flex-wrap items-center justify-end gap-2 [&:empty]:hidden" />
+          {/* The AI panel button sits last, after the page's own actions (plan 3.1). */}
+          {trailing}
+        </div>
       </div>
       {/* ShellBarMeta portal target: a pill (bg-sunken, ui2 >= v7.11.0) under the
           bar rather than a second bar row, so the bar keeps its height. The row is
@@ -755,8 +760,9 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const [baseUrls, setBaseUrls] = useState<AppBaseUrls>({});
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   // Apply and store the palette and light/dark; both are picked in User settings › Appearance.
-  usePalette();
-  useColorMode();
+  // The values are forwarded to the AI panel, whose document cannot see the in-page change.
+  const [palette] = usePalette();
+  const [colorMode] = useColorMode();
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
   const [planLine, setPlanLine] = useState<PlanLine | null>(null);
   const planFetchedAt = useRef(0);
@@ -780,6 +786,17 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     return orgs.find((o) => o.slug === slug)?.name ?? null;
   }, [orgToken, orgs, slug]);
   const lang = translation.getLang();
+  // The AI panel: frontai in an iframe beside the page (src/panel). Not in the AI app
+  // itself, nor in the login app.
+  const ai = useAiPanel({
+    slug,
+    orgToken,
+    panelBase: baseUrls.ai ?? null,
+    lang,
+    colorMode,
+    palette,
+    enabled: appId !== "ai" && appId !== "login",
+  });
   const portalBase = loginUrl ?? defaultLoginUrl();
   const orgsApiBase = orgsApiUrl ?? defaultLoginApiUrl();
 
@@ -1197,17 +1214,27 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   return (
     <ShellCrumbsProvider>
       <DocumentTitle orgName={orgName} path={titlePath} />
-      <AppShell sidebar={sidebar} openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
-        <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
-        {topBar && (
-          <DesktopBarUnlessHidden
-            appLabel={appLabel}
-            section={sectionLeaf ? label(sectionLeaf) : null}
-            onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
-          />
-        )}
-        <LiveChangesProvider token={orgToken}>{children}</LiveChangesProvider>
-      </AppShell>
+      {/* ui2's AppShell frame, spelled out so the AI panel can sit beside the page as a
+          sibling of the inset: sidebar, page, panel in one row. The panel pushes the page;
+          in big chat the page keeps its state at zero width. */}
+      <SidebarProvider openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
+        <div className="flex h-dvh w-full overflow-hidden">
+          {sidebar}
+          <SidebarInset className={ai.expanded ? "w-0 flex-none overflow-hidden" : undefined}>
+            <MobileBar orgName={orgName} appLabel={appLabel} section={sectionLeaf ? label(sectionLeaf) : null} scrollHide {...orgProps} />
+            {topBar && (
+              <DesktopBarUnlessHidden
+                appLabel={appLabel}
+                section={sectionLeaf ? label(sectionLeaf) : null}
+                onSection={() => { if (sectionLeaf) go(sectionLeaf); }}
+                trailing={<AiPanelButton ai={ai} />}
+              />
+            )}
+            <LiveChangesProvider token={orgToken}>{children}</LiveChangesProvider>
+          </SidebarInset>
+          <AiPanelFrame ai={ai} />
+        </div>
+      </SidebarProvider>
 
       {/* ⌘K command palette — shares the same flatten/match core as the inline box. */}
       <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>

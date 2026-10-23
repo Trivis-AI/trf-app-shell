@@ -16,3 +16,10 @@ export { PALETTE_OPTIONS, COLOR_MODES, usePalette, useColorMode } from "./appear
 export { LiveChangesProvider, useLiveChanges, useLiveChangesStatus, markOwnWrite, servicesApiBase } from "./live/liveChanges";
 export type { LiveStatus, UseLiveChangesOptions, LiveChangesProviderProps, LiveChangeBatch, LiveChangeEvent, LiveRefreshReason, LiveActor } from "./live/liveChanges";
 export type { ColorMode } from "./appearance";
+// The AI panel's bridge protocol, shared with frontai (the panel side). See src/panel.
+export {
+  AI_BRIDGE_MARKER, AI_BRIDGE_VERSION, envelope, parseHostMessage, parsePanelMessage,
+  identityFromToken, embeddingOrigin, aiPanelPath,
+} from "./panel/protocol";
+export type { AiHostMessage, AiPanelMessage, AiTheme, AiColorMode, AiIdentity } from "./panel/protocol";
+export type { AiPanelStatus } from "./panel/AiPanel";
