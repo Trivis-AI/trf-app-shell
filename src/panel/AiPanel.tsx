@@ -11,7 +11,9 @@ import {
   parsePanelMessage,
   type AiHostMessage,
   type AiIdentity,
+  type AiPageContext,
 } from "./protocol";
+import { pageEntityFromPath, pagePath } from "./pageEntity";
 import {
   EXPAND_OVERSHOOT,
   PANEL_MIN_WIDTH,
@@ -41,6 +43,9 @@ export interface AiPanelOptions {
   palette: string;
   /** False where the panel does not show: the AI app itself, the login app. */
   enabled: boolean;
+  /** The host app's id and current route, for the `context` message (AI-PANEL-ACTIONS.md). */
+  appId?: string;
+  pathname?: string;
 }
 
 export type AiPanelStatus =
@@ -237,6 +242,22 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     if (!ready || !connRef.current) return;
     post({ type: "visibility", conn: connRef.current, visible: open, expanded });
   }, [ready, open, expanded, post]);
+
+  // Where the host is, after the handshake and on every route change: the app, the route
+  // without the org prefix and the entity it names (pageEntity.ts). The panel picks its
+  // starter chips from it. The version only grows, so the panel can drop a late message.
+  const page = useMemo<Omit<AiPageContext, "version"> | null>(() => {
+    if (!opts.appId || opts.pathname === undefined) return null;
+    const path = pagePath(opts.pathname);
+    const entity = pageEntityFromPath(opts.appId, path);
+    return entity ? { app: opts.appId, path, entity } : { app: opts.appId, path };
+  }, [opts.appId, opts.pathname]);
+  const contextVersion = useRef(0);
+  useEffect(() => {
+    if (!ready || !connRef.current || !page) return;
+    contextVersion.current += 1;
+    post({ type: "context", conn: connRef.current, ...page, version: contextVersion.current });
+  }, [ready, page, post]);
 
   // Opening puts the cursor in the composer: focus the frame, then ask the panel to focus
   // its input. Closing hands focus back to the button.

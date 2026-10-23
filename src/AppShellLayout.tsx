@@ -797,6 +797,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     colorMode,
     palette,
     enabled: appId !== "ai" && appId !== "login",
+    appId,
+    pathname: location.pathname,
   });
   const portalBase = loginUrl ?? defaultLoginUrl();
   const orgsApiBase = orgsApiUrl ?? defaultLoginApiUrl();

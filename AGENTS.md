@@ -67,10 +67,15 @@ minted by the host on every iframe load, `init` and `ready` handshake, no creden
 bridge. `AiPanel.tsx` holds the hook, the button (top bar, after the page's actions, ⌘J) and the
 frame (width animates like the sidebar, iframe anchored right, drag handle with a shield, snap
 closed under 280 px, big chat past the maximum). `panelState.ts` keeps open and width in the apex
-cookie `trf-ai-panel`. The panel URL comes from discovery `base_urls.ai`; `VITE_AI_PANEL_URL`
-overrides it in local development. The host checks the panel's `ready` against its own token's
-account and org ids and sends nothing to a panel that does not match. Tests:
-`node --test src/panel/protocol.test.ts`.
+cookie `trf-ai-panel`, so every app shares them. The panel URL comes from discovery
+`base_urls["ai-ui"]` (services keys `base_urls` by service definition key, not by app id);
+`VITE_AI_PANEL_URL` overrides it in local development. The host checks the panel's `ready`
+against its own token's account and org ids and sends nothing to a panel that does not match.
+After `ready`, and on every route change, the host posts `context`: the app id, the route without
+the `/app/:slug` prefix and the entity the route names (`pageEntity.ts`, a per-app table of id
+positions, UUID or number only), with a version that only grows; the panel's starter chips follow
+it (`documentation/AI-PANEL-ACTIONS.md`). Tests: `node --test src/panel/protocol.test.ts
+src/panel/pageEntity.test.ts`.
 
 ## Known drift
 

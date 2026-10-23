@@ -22,6 +22,24 @@ export interface AiTheme {
   palette: string;
 }
 
+/** An entity the host's route names. Ids only: the agent reads the record itself. */
+export interface AiPageEntity {
+  type: string;
+  id: string;
+}
+
+/**
+ * Where the host is (documentation/AI-PANEL-ACTIONS.md, section 4.1): the app, the route
+ * without the `/app/:slug` prefix, the entity the route names, and a version that grows with
+ * every change so a late message never replaces a newer one.
+ */
+export interface AiPageContext {
+  app: string;
+  path: string;
+  entity?: AiPageEntity;
+  version: number;
+}
+
 /** Page to panel. */
 export type AiHostMessage =
   | { type: "init"; conn: string; slug: string; theme: AiTheme; lang: string; visible: boolean; expanded: boolean }
@@ -29,6 +47,7 @@ export type AiHostMessage =
   | { type: "lang"; conn: string; lang: string }
   | { type: "focus"; conn: string }
   | { type: "visibility"; conn: string; visible: boolean; expanded: boolean }
+  | ({ type: "context"; conn: string } & AiPageContext)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -47,7 +66,7 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "reset"]);
 const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "reset"]);
 
 /**
