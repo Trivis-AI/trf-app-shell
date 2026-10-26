@@ -803,6 +803,18 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     enabled: appId !== "ai" && appId !== "login",
     appId,
     pathname: location.pathname,
+    // The panel's `navigate` (already checked to be a route of ours): this app through the
+    // router, another app through its base URL from discovery, with the org prefix added.
+    onNavigate: ({ app, path }) => {
+      if (!slug) return;
+      const full = `/app/${slug}${path}`;
+      if (!app || app === appId) {
+        navigate(full);
+        return;
+      }
+      const base = baseUrls[`${app}-ui`] ?? baseUrls[app];
+      if (base) window.location.href = joinUrl(base, full);
+    },
   });
   const portalBase = loginUrl ?? defaultLoginUrl();
   const orgsApiBase = orgsApiUrl ?? defaultLoginApiUrl();
@@ -1240,7 +1252,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
             )}
             <LiveChangesProvider token={orgToken}>
               {/* Pages declare what they show for the AI panel (useAiPageContext). */}
-              <AiPageContextProvider store={ai._.pageStore}>{children}</AiPageContextProvider>
+              <AiPageContextProvider store={ai._.pageStore} actions={ai._.actionStore}>{children}</AiPageContextProvider>
             </LiveChangesProvider>
           </SidebarInset>
           <AiPanelFrame ai={ai} />

@@ -85,7 +85,17 @@ own key, the record, the list's type, filters, visible ids and total, and the se
 filter values only, never row data. Declared changes reach the panel debounced (200 ms); at send
 time the panel posts `context-request` and the host answers `context-snapshot` from the latest
 committed declaration (`pageCompose.ts`, pure and node-tested: a declaration made on another
-pathname is ignored, an empty selection is left out). `PanelMenuFit` (inside the SidebarProvider) collapses the
+pathname is ignored, an empty selection is left out). Pages also say what they can do for the
+panel: `useAiPageActions({ approve_purchase_invoices: (req) => ... })` registers an async handler
+per action type on the current pathname (the types travel in the context as `actions`); the panel's
+`action-request` (records with the AI's proposed verdict and reason, bounded and plain in
+`hostActions.ts`, node-tested) runs the handler the page registered, one at a time, and its
+promise, the outcome per record, goes back as `action-result` (`done`, `cancelled`, or
+`unsupported`, `busy`, `failed` from the host itself). The handler shows the page's own dialog and
+the person decides there under their own token; the host never calls a backend for the panel. The
+panel's `navigate` (a route of ours, in this app or another) runs through `onNavigate`, which
+`AppShellLayout` fills: the router for this app, discovery's base URL for another, the org prefix
+added. `PanelMenuFit` (inside the SidebarProvider) collapses the
 left menu to its rail when the docked panel would push the page under 720 px, remembers that in
 the cookie's third field (`open.width.menu`) and expands the menu again when the panel closes,
 unless the person changed the menu by hand meanwhile; it reads the menu's real width from ui2

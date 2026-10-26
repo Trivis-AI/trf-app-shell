@@ -24,10 +24,13 @@ export {
 export type {
   AiHostMessage, AiPanelMessage, AiTheme, AiColorMode, AiIdentity, AiPageContext, AiPageEntity,
   AiPageDeclaration, AiPageList, AiPageSelection,
+  AiActionItem, AiActionRequest, AiActionItemStatus, AiActionItemResult, AiActionStatus, AiActionResult, AiNavigateTarget,
 } from "./panel/protocol";
 export type { AiPanelStatus } from "./panel/AiPanel";
 // Pages declare what they show (page key, record, list, selection) for the panel's chip and
-// every turn's page_context; the shell answers the panel's send-time snapshot from it.
-export { useAiPageContext } from "./panel/pageContext";
+// every turn's page_context; the shell answers the panel's send-time snapshot from it. And
+// what they can do for it: a handler per action type, run on the panel's `action-request`.
+export { useAiPageContext, useAiPageActions } from "./panel/pageContext";
+export type { AiActionHandler } from "./panel/pageContext";
 // Which entity a route names, for the panel's `context` message (documentation/AI-PANEL-ACTIONS.md).
 export { pagePath, pageEntityFromPath } from "./panel/pageEntity";

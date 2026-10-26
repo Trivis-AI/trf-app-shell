@@ -9,13 +9,16 @@ import {
   identityFromToken,
   newConnectionId,
   parsePanelMessage,
+  type AiActionResult,
   type AiHostMessage,
   type AiIdentity,
+  type AiNavigateTarget,
   type AiPageContext,
 } from "./protocol";
 import { pageEntityFromPath, pagePath } from "./pageEntity";
 import { composePageContext } from "./pageCompose";
-import { createPageStore, type AiPageStore } from "./pageContext";
+import { createActionStore, createPageStore, findAction, type AiActionStore, type AiPageStore } from "./pageContext";
+import { actionTypesFor, normaliseActionRequest, normaliseActionResult, normaliseNavigate } from "./hostActions";
 import {
   EXPAND_OVERSHOOT,
   PAGE_MIN_WIDTH,
@@ -49,6 +52,12 @@ export interface AiPanelOptions {
   /** The host app's id and current route, for the `context` message (AI-PANEL-ACTIONS.md). */
   appId?: string;
   pathname?: string;
+  /**
+   * Carries out the panel's `navigate` request, already checked to be a route of ours: in this
+   * app through the router, in another app through its base URL from discovery. Without it
+   * the request is ignored.
+   */
+  onNavigate?: (target: AiNavigateTarget) => void;
 }
 
 export type AiPanelStatus =
@@ -87,6 +96,8 @@ export interface AiPanel {
     setMenuCollapsed: (v: boolean) => void;
     /** What the page declares about itself (useAiPageContext); the shell provides it around the page. */
     pageStore: AiPageStore;
+    /** What the page can do for the panel (useAiPageActions); provided the same way. */
+    actionStore: AiActionStore;
   };
 }
 
@@ -142,6 +153,9 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   // Cleared by the first `conversation` message and by any toggle of the person's own.
   const restoredOpenRef = useRef(enabled && initial.open);
   const pageStore = useMemo(createPageStore, []);
+  const actionStore = useMemo(createActionStore, []);
+  // One host action at a time: a page with its approval dialog open answers a second request `busy`.
+  const actionBusyRef = useRef(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -169,8 +183,8 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   );
 
   // Latest values for the message handler, which is registered once per connection target.
-  const latest = useRef({ slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname });
-  latest.current = { slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname };
+  const latest = useRef({ slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname, onNavigate: opts.onNavigate });
+  latest.current = { slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname, onNavigate: opts.onNavigate };
 
   // The page as the panel hears it: the route merged with the page's own declaration
   // (pageCompose.ts). The version only grows, so the panel can drop a late message.
@@ -184,8 +198,9 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
       path,
       routeEntity: appId ? pageEntityFromPath(appId, path) : null,
       declared: pageStore.current.value,
+      actions: actionTypesFor(actionStore.current.value, pathname),
     });
-  }, [pageStore]);
+  }, [pageStore, actionStore]);
   const postContext = useCallback(
     (snapshotFor?: string) => {
       const conn = connRef.current;
@@ -275,6 +290,45 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
           // A send is pending: answer from the latest committed page, not the debounced one.
           postContext(msg.request);
           return;
+        case "action-request": {
+          // The AI proposed; the page acts through the handler it registered for this type
+          // (useAiPageActions), on this pathname, one at a time. The person decides in the
+          // page's own dialog under their own token; the outcome per record goes back.
+          const reply = (result: AiActionResult) => post({ type: "action-result", conn: msg.conn, request: msg.request, ...result });
+          const req = normaliseActionRequest(msg);
+          if (!req) {
+            reply({ status: "failed" });
+            return;
+          }
+          const entry = findAction(actionStore.current.value, req.action, cur.pathname);
+          if (!entry) {
+            reply({ status: "unsupported" });
+            return;
+          }
+          if (actionBusyRef.current) {
+            reply({ status: "busy" });
+            return;
+          }
+          actionBusyRef.current = true;
+          let run: Promise<AiActionResult>;
+          try {
+            run = entry.run(req);
+          } catch {
+            run = Promise.resolve({ status: "failed" });
+          }
+          run.then(
+            (result) => reply(normaliseActionResult(result)),
+            () => reply({ status: "failed" }),
+          ).finally(() => {
+            actionBusyRef.current = false;
+          });
+          return;
+        }
+        case "navigate": {
+          const target = normaliseNavigate(msg);
+          if (target) cur.onNavigate?.(target);
+          return;
+        }
         case "reset":
           setPanelIdentity(null);
           return;
@@ -282,7 +336,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [enabled, panelOrigin, post, postContext]);
+  }, [enabled, panelOrigin, post, postContext, actionStore]);
 
   // A panel signed in as someone else, or for another org, is told so once and gets nothing more.
   useEffect(() => {
@@ -316,18 +370,21 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   useEffect(() => {
     if (!ready) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = pageStore.subscribe(() => {
+    const schedule = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
         postContext();
       }, CONTEXT_DEBOUNCE_MS);
-    });
+    };
+    const unsubscribe = pageStore.subscribe(schedule);
+    const unsubscribeActions = actionStore.subscribe(schedule);
     return () => {
       unsubscribe();
+      unsubscribeActions();
       if (timer) clearTimeout(timer);
     };
-  }, [ready, pageStore, postContext]);
+  }, [ready, pageStore, actionStore, postContext]);
 
   // Opening puts the cursor in the composer: focus the frame, then ask the panel to focus
   // its input. Closing hands focus back to the button.
@@ -425,7 +482,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     toggle,
     setOpen,
     setExpanded,
-    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag, menuCollapsed, setMenuCollapsed, pageStore },
+    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag, menuCollapsed, setMenuCollapsed, pageStore, actionStore },
   };
 }
 

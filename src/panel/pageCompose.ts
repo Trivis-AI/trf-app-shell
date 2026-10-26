@@ -19,6 +19,8 @@ export interface ComposeInput {
   /** What the route table says the page shows (pageEntity.ts `pageEntityFromPath`). */
   routeEntity: AiPageEntity | null;
   declared: AiPageDeclared | null;
+  /** The action types the page registered on this pathname (hostActions.ts `actionTypesFor`). */
+  actions?: string[];
 }
 
 /**
@@ -28,7 +30,7 @@ export interface ComposeInput {
  * is left out, and a declared entity wins over the route's guess.
  */
 export function composePageContext(input: ComposeInput): Omit<AiPageContext, "version"> | null {
-  const { appId, pathname, path, routeEntity, declared } = input;
+  const { appId, pathname, path, routeEntity, declared, actions } = input;
   if (!appId || pathname === undefined) return null;
   const d = declared && declared.pathname === pathname ? declared : null;
   const entity = d?.entity ?? routeEntity ?? undefined;
@@ -37,5 +39,6 @@ export function composePageContext(input: ComposeInput): Omit<AiPageContext, "ve
   if (d?.page) ctx.page = d.page;
   if (d?.list) ctx.list = d.list;
   if (d?.selected && d.selected.ids.length > 0) ctx.selected = d.selected;
+  if (actions && actions.length > 0) ctx.actions = actions;
   return ctx;
 }

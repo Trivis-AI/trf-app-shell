@@ -73,7 +73,69 @@ export interface AiPageContext {
   page?: string;
   list?: AiPageList;
   selected?: AiPageSelection;
+  /** Action types the page can carry out for the panel (useAiPageActions), sorted. */
+  actions?: string[];
   version: number;
+}
+
+/*
+ * Host actions (documentation/AI-SIDEPANEL-PLAN.md, 3.8): the AI proposes, the page acts.
+ * The panel posts `action-request` with the records and, per record, what the AI proposes
+ * and why; the host runs the handler the page registered for that action type, which shows
+ * the page's own dialog, and the person decides there under their own token. The outcome
+ * per record goes back as `action-result`. Reasons are the model's text: shown as data,
+ * never run. A request for an action the page did not register is answered `unsupported`.
+ */
+
+/** One record in a host action, with what the AI proposes for it. */
+export interface AiActionItem {
+  id: string;
+  /** The proposed verdict, in the action's own vocabulary (approve, hold). */
+  verdict?: string;
+  reason?: string;
+}
+
+export interface AiActionRequest {
+  /** The action type the page registered, e.g. "approve_purchase_invoices". */
+  action: string;
+  /** The records' entity type, e.g. "purchase_invoice". */
+  entity: string;
+  items: AiActionItem[];
+  /** The AI's one-line summary of the proposal. */
+  note?: string;
+}
+
+export type AiActionItemStatus = "done" | "skipped" | "conflict" | "failed";
+
+export interface AiActionItemResult {
+  id: string;
+  status: AiActionItemStatus;
+  /** A translation key or a short note: why it was skipped, what the server said. */
+  detail?: string;
+}
+
+export type AiActionStatus =
+  /** The person acted; `items` says what happened to each record. */
+  | "done"
+  /** The person closed the dialog without acting. */
+  | "cancelled"
+  /** The page registered no handler for this action type. */
+  | "unsupported"
+  /** Another action is still open on the page. */
+  | "busy"
+  /** The handler threw, or the request was malformed. */
+  | "failed";
+
+export interface AiActionResult {
+  status: AiActionStatus;
+  items?: AiActionItemResult[];
+}
+
+/** Where the panel asks the host to go: a route without the `/app/:slug` prefix, in this app or another. */
+export interface AiNavigateTarget {
+  /** The app id (shell `appId`, e.g. "purchase"); absent for this app. */
+  app?: string;
+  path: string;
 }
 
 /** Page to panel. */
@@ -87,6 +149,8 @@ export type AiHostMessage =
   | ({ type: "context"; conn: string } & AiPageContext)
   /** The answer to `context-request`: the page as it is at this moment, for one send. */
   | ({ type: "context-snapshot"; conn: string; request: string } & AiPageContext)
+  /** The outcome of an `action-request`, with the same request id, once the person has acted. */
+  | ({ type: "action-result"; conn: string; request: string } & AiActionResult)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -101,6 +165,10 @@ export type AiPanelMessage =
   | { type: "conversation"; conn: string; active: boolean }
   /** A send is pending: asks for a fresh snapshot of the page, answered with the same request id. */
   | { type: "context-request"; conn: string; request: string }
+  /** Asks the page to carry out a proposal through its own dialog; answered with `action-result`. */
+  | ({ type: "action-request"; conn: string; request: string } & AiActionRequest)
+  /** Asks the host to open a route, in this app or another; validated by the host. */
+  | ({ type: "navigate"; conn: string } & AiNavigateTarget)
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -109,8 +177,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "reset"]);
 
 /**
  * Unwraps a bridge message, or returns null for anything else: other postMessage

@@ -50,6 +50,12 @@ test("an empty selection is no selection; a declared entity wins over the route"
   assert.deepEqual(ctx, { app: "purchase", path: `/invoices/${uuid}`, page: "purchase-invoice", entity: { type: "purchase_invoice", id: uuid } });
 });
 
+test("the actions a page registered ride in the context; none means no field", () => {
+  const base = { appId: "purchase", pathname: "/app/acme/invoices", path: "/invoices", routeEntity: null, declared: null };
+  assert.deepEqual(composePageContext({ ...base, actions: ["approve_purchase_invoices"] }), { app: "purchase", path: "/invoices", actions: ["approve_purchase_invoices"] });
+  assert.deepEqual(composePageContext({ ...base, actions: [] }), { app: "purchase", path: "/invoices" });
+});
+
 test("no app or no pathname means no context", () => {
   assert.equal(composePageContext({ appId: undefined, pathname: "/app/acme", path: "/", routeEntity: null, declared: null }), null);
   assert.equal(composePageContext({ appId: "purchase", pathname: undefined, path: "/", routeEntity: null, declared: null }), null);

@@ -51,6 +51,18 @@ test("the send-time snapshot: the request from the panel, the answer from the ho
   assert.equal(parseHostMessage(envelope({ type: "context-request", conn: "c1", request: "r1" }), "c1"), null, "a panel type sent by a host");
 });
 
+test("host actions: the request from the panel, the result from the host, navigate from the panel", () => {
+  const request = envelope({ type: "action-request", conn: "c1", request: "r2", action: "approve_purchase_invoices", entity: "purchase_invoice", items: [{ id: "1", verdict: "approve", reason: "fine" }] });
+  assert.deepEqual(parsePanelMessage(request, "c1"), request);
+  assert.equal(parsePanelMessage(request, "c2"), null);
+  assert.equal(parseHostMessage(request, "c1"), null, "a panel type sent by a host");
+  const result = envelope({ type: "action-result", conn: "c1", request: "r2", status: "done", items: [{ id: "1", status: "done", detail: "confirmed" }] });
+  assert.deepEqual(parseHostMessage(result, "c1"), result);
+  assert.equal(parsePanelMessage(result, "c1"), null, "a host type sent by a panel");
+  const nav = envelope({ type: "navigate", conn: "c1", app: "purchase", path: "/invoices" });
+  assert.deepEqual(parsePanelMessage(nav, "c1"), nav);
+});
+
 test("oversized payloads are dropped", () => {
   const big = envelope({ type: "unread", conn: "c1", unread: true, pad: "x".repeat(AI_BRIDGE_MAX_BYTES) });
   assert.equal(parsePanelMessage(big, "c1"), null);
