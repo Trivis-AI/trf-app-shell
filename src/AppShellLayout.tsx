@@ -313,7 +313,10 @@ function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, planLine, 
       <div
         className={cn(
           "flex min-w-0 flex-1 items-center gap-1 overflow-hidden transition-[max-width,opacity] duration-200",
-          collapsed ? "max-w-0 opacity-0" : "max-w-[12rem] opacity-100",
+          // Expanded, the cap only has to exceed the widest menu (ui2 SIDEBAR_MAX_WIDTH, 400 px)
+          // so the block fills the row and the chevrons sit at the button's right edge; a
+          // 12rem cap left them beside the text once the menu became resizable.
+          collapsed ? "max-w-0 opacity-0" : "max-w-[30rem] opacity-100",
         )}
       >
         <div className="min-w-0 flex-1 text-left">
