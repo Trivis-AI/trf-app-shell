@@ -28,7 +28,7 @@
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
-    "@trf/ui2": "github:Trivis-AI/trf-ui2#v7.23.0",
+    "@trf/ui2": "github:Trivis-AI/trf-ui2#v7.25.1",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^1.31.0",
