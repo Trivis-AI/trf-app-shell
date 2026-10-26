@@ -27,11 +27,15 @@ const DEFAULT_MARKER = "trf-palette-default-v1";
 const hasDefaultMarker = () =>
   document.cookie.split("; ").some((c) => c.startsWith(`${DEFAULT_MARKER}=`));
 
-/** Attributes for a preference cookie shared by every app on the apex (every port on localhost). */
-export function cookieAttrs(): string {
+/**
+ * Attributes for a preference cookie shared by every app on the apex (every port on localhost).
+ * "year" is a remembered preference, "session" lasts until the browser closes, "expire" deletes.
+ */
+export function cookieAttrs(lifetime: "year" | "session" | "expire" = "year"): string {
   const parts = window.location.hostname.split(".");
   const domain = parts.length >= 2 ? `; domain=.${parts.slice(-2).join(".")}` : "";
-  return `; path=/; max-age=31536000; samesite=lax${domain}`;
+  const age = lifetime === "year" ? "; max-age=31536000" : lifetime === "expire" ? "; max-age=0" : "";
+  return `; path=/${age}; samesite=lax${domain}`;
 }
 
 export function readPalette(): string {

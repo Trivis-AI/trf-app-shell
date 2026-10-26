@@ -28,6 +28,8 @@ test("panel messages: everything after loaded needs the current connection id", 
   assert.equal(parsePanelMessage(envelope(ready), "c2"), null, "an older connection");
   assert.equal(parsePanelMessage(envelope(ready), null), null, "before any connection");
   assert.equal(parsePanelMessage(envelope({ type: "close" }), "c1"), null, "no connection id at all");
+  const conversation = { type: "conversation", conn: "c1", active: true } as const;
+  assert.deepEqual(parsePanelMessage(envelope(conversation), "c1"), envelope(conversation));
 });
 
 test("host messages: init carries its own connection id, the rest must match it", () => {

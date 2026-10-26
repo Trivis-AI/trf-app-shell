@@ -66,8 +66,11 @@ the wire shape both sides import (frontai through this package): marker, version
 minted by the host on every iframe load, `init` and `ready` handshake, no credential on the
 bridge. `AiPanel.tsx` holds the hook, the button (top bar, after the page's actions, ⌘J) and the
 frame (width animates like the sidebar, iframe anchored right, drag handle with a shield, snap
-closed under 280 px, big chat past the maximum). `panelState.ts` keeps open and width in the apex
-cookie `trf-ai-panel`, so every app shares them. The panel URL comes from discovery
+closed under 280 px, big chat past the maximum). `panelState.ts` keeps width and the menu flag in
+the apex cookie `trf-ai-panel` for a year, so every app shares them, and open in the session
+cookie `trf-ai-panel-open`, which the host writes only while the panel reports a conversation in
+this tab (the panel's `conversation` message): an idle panel stays across client-side routes
+inside one app and is gone on the next full load. The panel URL comes from discovery
 `base_urls["ai-ui"]` (services keys `base_urls` by service definition key, not by app id);
 `VITE_AI_PANEL_URL` overrides it in local development. The host checks the panel's `ready`
 against its own token's account and org ids and sends nothing to a panel that does not match.

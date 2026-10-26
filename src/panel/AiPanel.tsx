@@ -125,6 +125,10 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   const [animate, setAnimate] = useState(false);
   const [panelIdentity, setPanelIdentity] = useState<(AiIdentity & { slug: string }) | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // The panel holds a conversation in this tab (its `conversation` message). Open is
+  // remembered across page loads only while it does: an idle panel does not follow the
+  // person to the next app (panelState.ts).
+  const [engaged, setEngaged] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -172,6 +176,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     resetSentRef.current = false;
     setPanelIdentity(null);
     setLoaded(false);
+    setEngaged(false);
   }, [src]);
 
   useEffect(() => {
@@ -190,6 +195,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
           resetSentRef.current = false;
           setPanelIdentity(null);
           setLoaded(true);
+          setEngaged(false);
           post({
             type: "init",
             conn,
@@ -216,6 +222,9 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
           return;
         case "unread":
           setUnread(msg.unread);
+          return;
+        case "conversation":
+          setEngaged(msg.active);
           return;
         case "reset":
           setPanelIdentity(null);
@@ -290,10 +299,11 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   );
   const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
 
+  // Sizes are remembered as they are; open only while the panel holds a conversation.
   useEffect(() => {
     if (!enabled) return;
-    writePanelState({ open, width, menuCollapsed });
-  }, [enabled, open, width, menuCollapsed]);
+    writePanelState({ open: open && engaged, width, menuCollapsed });
+  }, [enabled, open, engaged, width, menuCollapsed]);
 
   // ⌘J / Ctrl-J toggles the panel. Inside the iframe the panel forwards the same key.
   useEffect(() => {

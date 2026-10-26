@@ -58,6 +58,8 @@ export type AiPanelMessage =
   | { type: "expand"; conn: string }
   | { type: "collapse"; conn: string }
   | { type: "unread"; conn: string; unread: boolean }
+  /** Whether the panel holds a conversation in this tab; the host remembers open only while it does. */
+  | { type: "conversation"; conn: string; active: boolean }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -67,7 +69,7 @@ export function envelope<T extends object>(msg: T): T & Envelope {
 }
 
 const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "reset"]);
 
 /**
  * Unwraps a bridge message, or returns null for anything else: other postMessage
