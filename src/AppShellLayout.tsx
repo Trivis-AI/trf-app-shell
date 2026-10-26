@@ -18,6 +18,7 @@ import {
 import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
 import { LiveChangesProvider } from "./live/liveChanges";
 import { useAiPanel, AiPanelButton, AiPanelFrame, PanelMenuFit } from "./panel/AiPanel";
+import { AiPageContextProvider } from "./panel/pageContext";
 import { rememberOrg } from "./orgLanding";
 import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
@@ -1237,7 +1238,10 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
                 trailing={<AiPanelButton ai={ai} />}
               />
             )}
-            <LiveChangesProvider token={orgToken}>{children}</LiveChangesProvider>
+            <LiveChangesProvider token={orgToken}>
+              {/* Pages declare what they show for the AI panel (useAiPageContext). */}
+              <AiPageContextProvider store={ai._.pageStore}>{children}</AiPageContextProvider>
+            </LiveChangesProvider>
           </SidebarInset>
           <AiPanelFrame ai={ai} />
         </div>

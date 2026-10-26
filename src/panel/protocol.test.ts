@@ -41,6 +41,16 @@ test("host messages: init carries its own connection id, the rest must match it"
   assert.equal(parseHostMessage(envelope({ type: "loaded" }), "c9"), null, "a panel type sent by a host");
 });
 
+test("the send-time snapshot: the request from the panel, the answer from the host, both on the connection", () => {
+  const request = { type: "context-request", conn: "c1", request: "r1" } as const;
+  assert.deepEqual(parsePanelMessage(envelope(request), "c1"), envelope(request));
+  assert.equal(parsePanelMessage(envelope(request), "c2"), null);
+  const snapshot = envelope({ type: "context-snapshot", conn: "c1", request: "r1", app: "purchase", path: "/invoices", selected: { type: "purchase_invoice", ids: ["1"] }, version: 4 });
+  assert.deepEqual(parseHostMessage(snapshot, "c1"), snapshot);
+  assert.equal(parseHostMessage(snapshot, "c0"), null);
+  assert.equal(parseHostMessage(envelope({ type: "context-request", conn: "c1", request: "r1" }), "c1"), null, "a panel type sent by a host");
+});
+
 test("oversized payloads are dropped", () => {
   const big = envelope({ type: "unread", conn: "c1", unread: true, pad: "x".repeat(AI_BRIDGE_MAX_BYTES) });
   assert.equal(parsePanelMessage(big, "c1"), null);

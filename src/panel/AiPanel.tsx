@@ -14,6 +14,8 @@ import {
   type AiPageContext,
 } from "./protocol";
 import { pageEntityFromPath, pagePath } from "./pageEntity";
+import { composePageContext } from "./pageCompose";
+import { createPageStore, type AiPageStore } from "./pageContext";
 import {
   EXPAND_OVERSHOOT,
   PAGE_MIN_WIDTH,
@@ -83,8 +85,13 @@ export interface AiPanel {
     /** Whether the panel collapsed the left menu (PanelMenuFit). */
     menuCollapsed: boolean;
     setMenuCollapsed: (v: boolean) => void;
+    /** What the page declares about itself (useAiPageContext); the shell provides it around the page. */
+    pageStore: AiPageStore;
   };
 }
+
+/** How long a burst of page changes (a click through a selection) waits before the panel hears it. */
+const CONTEXT_DEBOUNCE_MS = 200;
 
 function originOf(url: string | null): string | null {
   if (!url) return null;
@@ -129,6 +136,12 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   // remembered across page loads only while it does: an idle panel does not follow the
   // person to the next app (panelState.ts).
   const [engaged, setEngaged] = useState(false);
+  // Open came from the cookie, not from a click on this page. The cookie says a conversation
+  // was live when the last page was left; if the panel then reports none (it went stale, or
+  // it was another tab's), the restored panel closes again instead of sitting there empty.
+  // Cleared by the first `conversation` message and by any toggle of the person's own.
+  const restoredOpenRef = useRef(enabled && initial.open);
+  const pageStore = useMemo(createPageStore, []);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -156,8 +169,35 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   );
 
   // Latest values for the message handler, which is registered once per connection target.
-  const latest = useRef({ slug, lang, colorMode, palette, open, expanded });
-  latest.current = { slug, lang, colorMode, palette, open, expanded };
+  const latest = useRef({ slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname });
+  latest.current = { slug, lang, colorMode, palette, open, expanded, appId: opts.appId, pathname: opts.pathname };
+
+  // The page as the panel hears it: the route merged with the page's own declaration
+  // (pageCompose.ts). The version only grows, so the panel can drop a late message.
+  const contextVersion = useRef(0);
+  const composeContext = useCallback((): Omit<AiPageContext, "version"> | null => {
+    const { appId, pathname } = latest.current;
+    const path = pathname === undefined ? "/" : pagePath(pathname);
+    return composePageContext({
+      appId,
+      pathname,
+      path,
+      routeEntity: appId ? pageEntityFromPath(appId, path) : null,
+      declared: pageStore.current.value,
+    });
+  }, [pageStore]);
+  const postContext = useCallback(
+    (snapshotFor?: string) => {
+      const conn = connRef.current;
+      const ctx = composeContext();
+      if (!conn || !ctx) return;
+      contextVersion.current += 1;
+      const version = contextVersion.current;
+      if (snapshotFor !== undefined) post({ type: "context-snapshot", conn, request: snapshotFor, ...ctx, version });
+      else post({ type: "context", conn, ...ctx, version });
+    },
+    [composeContext, post],
+  );
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setAnimate(true));
@@ -225,6 +265,15 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
           return;
         case "conversation":
           setEngaged(msg.active);
+          if (!msg.active && restoredOpenRef.current) {
+            setOpenState(false);
+            setExpanded(false);
+          }
+          restoredOpenRef.current = false;
+          return;
+        case "context-request":
+          // A send is pending: answer from the latest committed page, not the debounced one.
+          postContext(msg.request);
           return;
         case "reset":
           setPanelIdentity(null);
@@ -233,7 +282,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [enabled, panelOrigin, post]);
+  }, [enabled, panelOrigin, post, postContext]);
 
   // A panel signed in as someone else, or for another org, is told so once and gets nothing more.
   useEffect(() => {
@@ -257,21 +306,28 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     post({ type: "visibility", conn: connRef.current, visible: open, expanded });
   }, [ready, open, expanded, post]);
 
-  // Where the host is, after the handshake and on every route change: the app, the route
-  // without the org prefix and the entity it names (pageEntity.ts). The panel picks its
-  // starter chips from it. The version only grows, so the panel can drop a late message.
-  const page = useMemo<Omit<AiPageContext, "version"> | null>(() => {
-    if (!opts.appId || opts.pathname === undefined) return null;
-    const path = pagePath(opts.pathname);
-    const entity = pageEntityFromPath(opts.appId, path);
-    return entity ? { app: opts.appId, path, entity } : { app: opts.appId, path };
-  }, [opts.appId, opts.pathname]);
-  const contextVersion = useRef(0);
+  // Where the host is, after the handshake and on every route change, at once; and after
+  // every change the page declares (a selection growing click by click), debounced. The
+  // panel picks its starter chips and its "Looking at" chip from it.
   useEffect(() => {
-    if (!ready || !connRef.current || !page) return;
-    contextVersion.current += 1;
-    post({ type: "context", conn: connRef.current, ...page, version: contextVersion.current });
-  }, [ready, page, post]);
+    if (!ready) return;
+    postContext();
+  }, [ready, opts.appId, opts.pathname, postContext]);
+  useEffect(() => {
+    if (!ready) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = pageStore.subscribe(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        postContext();
+      }, CONTEXT_DEBOUNCE_MS);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [ready, pageStore, postContext]);
 
   // Opening puts the cursor in the composer: focus the frame, then ask the panel to focus
   // its input. Closing hands focus back to the button.
@@ -285,6 +341,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   const setOpen = useCallback(
     (next: boolean) => {
       if (!enabled) return;
+      restoredOpenRef.current = false;
       setOpenState(next);
       if (next) {
         setMounted(true);
@@ -368,7 +425,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     toggle,
     setOpen,
     setExpanded,
-    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag, menuCollapsed, setMenuCollapsed },
+    _: { src, panelOrigin, mounted, animate, dragging, canDock, iframeRef, buttonRef, startDrag, menuCollapsed, setMenuCollapsed, pageStore },
   };
 }
 

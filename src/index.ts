@@ -21,7 +21,13 @@ export {
   AI_BRIDGE_MARKER, AI_BRIDGE_VERSION, envelope, parseHostMessage, parsePanelMessage,
   identityFromToken, embeddingOrigin, aiPanelPath,
 } from "./panel/protocol";
-export type { AiHostMessage, AiPanelMessage, AiTheme, AiColorMode, AiIdentity, AiPageContext, AiPageEntity } from "./panel/protocol";
+export type {
+  AiHostMessage, AiPanelMessage, AiTheme, AiColorMode, AiIdentity, AiPageContext, AiPageEntity,
+  AiPageDeclaration, AiPageList, AiPageSelection,
+} from "./panel/protocol";
 export type { AiPanelStatus } from "./panel/AiPanel";
+// Pages declare what they show (page key, record, list, selection) for the panel's chip and
+// every turn's page_context; the shell answers the panel's send-time snapshot from it.
+export { useAiPageContext } from "./panel/pageContext";
 // Which entity a route names, for the panel's `context` message (documentation/AI-PANEL-ACTIONS.md).
 export { pagePath, pageEntityFromPath } from "./panel/pageEntity";

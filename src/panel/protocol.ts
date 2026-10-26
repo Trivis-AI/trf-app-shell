@@ -29,14 +29,50 @@ export interface AiPageEntity {
 }
 
 /**
+ * A list the page shows (plan section 3.6): the rows' entity type, how the person has
+ * narrowed it, which rows are on screen and how many match in all. Ids and filter values
+ * only, never row data: the agent reads the records itself, so the page can neither feed
+ * it stale numbers nor grant anything. Filter values are the person's own text and are
+ * shown to the model as data.
+ */
+export interface AiPageList {
+  type: string;
+  filters?: Record<string, string>;
+  visibleIds?: string[];
+  total?: number;
+}
+
+/** The records the person has picked on the page; the selection may reach past the visible rows. */
+export interface AiPageSelection {
+  type: string;
+  ids: string[];
+}
+
+/**
+ * What a page declares about itself through `useAiPageContext`: its own key, the record it
+ * shows, the list it shows and the selection on it. The shell adds the app, the route and
+ * the version. A page that declares nothing is still described by its route (pageEntity.ts).
+ */
+export interface AiPageDeclaration {
+  page: string;
+  entity?: AiPageEntity;
+  list?: AiPageList;
+  selected?: AiPageSelection;
+}
+
+/**
  * Where the host is (documentation/AI-PANEL-ACTIONS.md, section 4.1): the app, the route
- * without the `/app/:slug` prefix, the entity the route names, and a version that grows with
- * every change so a late message never replaces a newer one.
+ * without the `/app/:slug` prefix, the entity the route names or the page declares, the
+ * page's own declaration when it made one, and a version that grows with every change so a
+ * late message never replaces a newer one.
  */
 export interface AiPageContext {
   app: string;
   path: string;
   entity?: AiPageEntity;
+  page?: string;
+  list?: AiPageList;
+  selected?: AiPageSelection;
   version: number;
 }
 
@@ -47,7 +83,10 @@ export type AiHostMessage =
   | { type: "lang"; conn: string; lang: string }
   | { type: "focus"; conn: string }
   | { type: "visibility"; conn: string; visible: boolean; expanded: boolean }
+  /** The debounced context, for the chip and the starter chips. */
   | ({ type: "context"; conn: string } & AiPageContext)
+  /** The answer to `context-request`: the page as it is at this moment, for one send. */
+  | ({ type: "context-snapshot"; conn: string; request: string } & AiPageContext)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -60,6 +99,8 @@ export type AiPanelMessage =
   | { type: "unread"; conn: string; unread: boolean }
   /** Whether the panel holds a conversation in this tab; the host remembers open only while it does. */
   | { type: "conversation"; conn: string; active: boolean }
+  /** A send is pending: asks for a fresh snapshot of the page, answered with the same request id. */
+  | { type: "context-request"; conn: string; request: string }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -68,8 +109,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "reset"]);
 
 /**
  * Unwraps a bridge message, or returns null for anything else: other postMessage
