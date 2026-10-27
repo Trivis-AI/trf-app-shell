@@ -29,6 +29,7 @@ import {
   readPanelState,
   writePanelState,
 } from "./panelState";
+import { shellText } from "../shellText";
 
 /*
  * The AI panel: frontai's panel route in an iframe docked at the right of the shell,
@@ -534,7 +535,7 @@ export function AiPanelButton({ ai, className }: { ai: AiPanel; className?: stri
       size="icon"
       aria-label="AI"
       aria-pressed={ai.open}
-      title="AI (⌘J)"
+      title={shellText("<trn-shell-ai-shortcut>", "AI (⌘J)")}
       onClick={ai.toggle}
       className={cn(
         "relative size-8 text-muted-foreground hover:text-foreground",
@@ -577,7 +578,7 @@ export function AiPanelFrame({ ai }: { ai: AiPanel }) {
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize AI panel"
+          aria-label={shellText("<trn-shell-resize-ai-panel>", "Resize AI panel")}
           onPointerDown={startDrag}
           className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-border active:bg-primary/40"
         />
@@ -595,7 +596,7 @@ export function AiPanelFrame({ ai }: { ai: AiPanel }) {
       {dragging && <div aria-hidden className="absolute inset-0 z-20 cursor-col-resize" />}
       {ai.status === "mismatch" && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-card p-6 text-center text-sm text-muted-foreground">
-          The AI panel is signed in as another account or organisation. Reload the page to continue.
+          {shellText("<trn-shell-ai-panel-mismatch>", "The AI panel is signed in as another account or organisation. Reload the page to continue.")}
         </div>
       )}
     </aside>

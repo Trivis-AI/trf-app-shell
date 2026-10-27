@@ -25,6 +25,8 @@ import { useThemeFavicon } from "./favicon";
 import { isStagingHost } from "./environment";
 import { useDocumentTitle } from "./title";
 import { useColorMode, usePalette } from "./appearance";
+import { useLanguages } from "./languages";
+import { setShellTranslate, shellText } from "./shellText";
 import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots, useShellBarPinned, useShellBarHidden } from "./crumbs";
 import type { MenuItem, AppBaseUrls } from "@trf/ui";
 
@@ -45,6 +47,8 @@ import type { MenuItem, AppBaseUrls } from "@trf/ui";
 export interface TranslationLike {
   getLang(): string;
   setLang(lang: string): void;
+  /** The text for a key in the current language, else the fallback. The shell's own UI text goes through it. */
+  translate?(key: string, fallback: string): string;
 }
 
 /** A hover-reveal action rendered on a nav row (e.g. AI's "new chat" +). */
@@ -168,8 +172,8 @@ function MenuSearchBox({
           variant="ghost"
           size="icon"
           onClick={onOpenPalette}
-          aria-label="Search menu"
-          title="Search (⌘K)"
+          aria-label={shellText("<trn-shell-search-menu>", "Search menu")}
+          title={shellText("<trn-shell-search-shortcut>", "Search (⌘K)")}
           className="size-8 text-muted-foreground hover:text-foreground"
         >
           <Search />
@@ -184,20 +188,13 @@ function MenuSearchBox({
         onChange={(e) => setQuery(e.target.value)}
         onClear={() => setQuery("")}
         onKeyDown={onKeyDown}
-        placeholder="Search…"
-        aria-label="Search menu"
+        placeholder={shellText("<trn-search>", "Search…")}
+        aria-label={shellText("<trn-shell-search-menu>", "Search menu")}
         className="h-9 bg-sidebar-field focus-visible:bg-sidebar-field-focus max-md:h-11 max-md:text-base"
       />
     </div>
   );
 }
-
-const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "ee", label: "Eesti" },
-  { code: "lv", label: "Latviešu" },
-  { code: "lt", label: "Lietuvių" },
-];
 
 // Org-switcher texts per shell language (the shell has no t() surface; static
 // strings are lang-keyed here, like menu labels are in the discovery payload).
@@ -457,7 +454,7 @@ function MobileToggle() {
   return (
     <button
       type="button"
-      aria-label={mobileOpen ? "Close menu" : "Open menu"}
+      aria-label={mobileOpen ? shellText("<trn-shell-close-menu>", "Close menu") : shellText("<trn-shell-open-menu>", "Open menu")}
       aria-expanded={mobileOpen}
       onClick={() => setMobileOpen(!mobileOpen)}
       className="flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-6"
@@ -538,10 +535,10 @@ function StagingChip({ className }: { className?: string }) {
   return (
     <Badge
       variant="warning"
-      title="Staging environment (trf.is) — not production data"
+      title={shellText("<trn-shell-staging-title>", "Staging environment (trf.is), not production data")}
       className={cn("shrink-0 uppercase tracking-wider", className)}
     >
-      Staging
+      {shellText("<trn-shell-staging>", "Staging")}
     </Badge>
   );
 }
@@ -612,7 +609,7 @@ function DesktopBar({ appLabel, section, onSection, trailing }: DesktopBarProps)
           56px tall. The row only grows if the page's actions wrap on a narrow window. */}
       <div className="flex min-h-14 items-center gap-1.5 px-6 py-2 text-sm">
         <StagingChip className="mr-1" />
-        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5">
+        <nav aria-label={shellText("<trn-shell-breadcrumb>", "Breadcrumb")} className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="shrink-0 text-muted-foreground">{appLabel}</span>
           {section && (
             <>
@@ -701,6 +698,7 @@ function LanguageSelect({ translation }: { translation: TranslationLike }) {
   useLangVersion();
   const { collapsed } = useSidebar();
   const current = translation.getLang();
+  const languages = useLanguages();
   return (
     <div
       className={cn(
@@ -710,17 +708,18 @@ function LanguageSelect({ translation }: { translation: TranslationLike }) {
     >
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label="Language"
-          title="Language"
+          aria-label={shellText("<trn-language>", "Language")}
+          title={shellText("<trn-language>", "Language")}
           className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4 max-md:size-10 max-md:[&_svg]:size-5"
         >
           <Globe />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-40">
-          {LANGUAGES.map((l) => (
+          {languages.map((l) => (
             <DropdownMenuItem key={l.code} onSelect={() => translation.setLang(l.code)}>
               <Check className={cn("mr-2 size-4 shrink-0", l.code === current ? "opacity-100" : "opacity-0")} />
               <span>{l.label}</span>
+              {l.beta && <span className="ml-auto pl-3 text-xs text-muted-foreground">{shellText("<trn-shell-beta>", "beta")}</span>}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -743,8 +742,8 @@ function LogoutButton({ loginUrl }: { loginUrl: string }) {
         variant="ghost"
         size="icon"
         onClick={() => logout(loginUrl)}
-        aria-label="Sign out"
-        title="Sign out"
+        aria-label={shellText("<trn-shell-sign-out>", "Sign out")}
+        title={shellText("<trn-shell-sign-out>", "Sign out")}
         className="size-8 text-muted-foreground hover:text-foreground max-md:size-10 max-md:[&_svg]:size-5"
       >
         <LogOut />
@@ -755,6 +754,8 @@ function LogoutButton({ loginUrl }: { loginUrl: string }) {
 
 export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApiUrl, itemAction, topBar = true, children }: AppShellLayoutProps) {
   useLangVersion();
+  // The shell's own text follows the app's translations (shellText.ts); children render after this.
+  setShellTranslate(translation.translate ? (key, fallback) => translation.translate!(key, fallback) : undefined);
   useThemeFavicon();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1104,7 +1105,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     const isChat = path.endsWith("/chat") || (!!slug && path === `/app/${slug}`);
     if (!isAi || !isChat) return null;
     return {
-      label: "New chat",
+      label: shellText("<trn-new-chat>", "New chat"),
       onClick: () => {
         if (ctx.internal) navigate(ctx.href!);
         else window.location.href = ctx.href!;
@@ -1185,7 +1186,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           <div ref={resultsRef}>
             <SidebarMenu>
               {results.length === 0 ? (
-                <Text className="px-3 py-2 text-sm text-muted-foreground">No matches</Text>
+                <Text className="px-3 py-2 text-sm text-muted-foreground">{shellText("<trn-shell-no-matches>", "No matches")}</Text>
               ) : (
                 results.map((leaf, idx) => (
                   <SidebarMenuItem key={leaf.item.id}>
@@ -1262,11 +1263,11 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       {/* ⌘K command palette — shares the same flatten/match core as the inline box. */}
       <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
         <DialogContent className="overflow-hidden p-0 sm:max-w-lg">
-          <DialogTitle className="sr-only">Search menu</DialogTitle>
+          <DialogTitle className="sr-only">{shellText("<trn-shell-search-menu>", "Search menu")}</DialogTitle>
           <Command filter={(_v, search, keywords) => (keywords && matchesQuery(keywords[0] ?? "", search) ? 1 : 0)}>
-            <CommandInput placeholder="Search menu…" />
+            <CommandInput placeholder={shellText("<trn-shell-search-menu-placeholder>", "Search menu…")} />
             <CommandList>
-              <CommandEmpty>No matches</CommandEmpty>
+              <CommandEmpty>{shellText("<trn-shell-no-matches>", "No matches")}</CommandEmpty>
               {searchLeaves.map((leaf) => (
                 <CommandItem key={leaf.item.id} value={leaf.item.id} keywords={[leaf.hay]} onSelect={() => goFromSearch(leaf.item)}>
                   <span className="flex min-w-0 flex-col">
