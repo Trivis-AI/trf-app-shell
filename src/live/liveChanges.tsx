@@ -106,6 +106,8 @@ export function LiveChangesProvider({ token, apiBase, children }: LiveChangesPro
     const base = apiBase ?? servicesApiBase();
     let stopped = false;
     let attempt = 0;
+    /** The server said the token ran out: wait for the renewed one rather than retry with the stale one. */
+    let expired = false;
     let controller: AbortController | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
@@ -156,7 +158,9 @@ export function LiveChangesProvider({ token, apiBase, children }: LiveChangesPro
           return;
         case "expired":
           // The token the stream was opened with ran out; the renewing token hook
-          // delivers a new one, which reopens the stream through this effect.
+          // delivers a new one, which reopens the stream through this effect. Until
+          // then a retry with this token would only earn a 401.
+          expired = true;
           controller?.abort();
           return;
         default:
@@ -203,6 +207,14 @@ export function LiveChangesProvider({ token, apiBase, children }: LiveChangesPro
       }
       if (watchdog) clearTimeout(watchdog);
       if (stopped) return;
+      if (expired) {
+        // Normally the renewed token arrives first and this effect restarts. If
+        // it does not, one slow retry keeps the stream from staying dead.
+        expired = false;
+        setStatus("reconnecting");
+        retryTimer = setTimeout(() => void connect(), 15_000);
+        return;
+      }
       // A stream that closed after being open reconnects at once; the
       // reconnect's "ready" resyncs the pages.
       scheduleRetry(false);
