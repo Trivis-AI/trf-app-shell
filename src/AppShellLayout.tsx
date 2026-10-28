@@ -229,6 +229,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
   contracts: Signature, "assets and warehouse": CirclePile, tables: Table2, settings: Settings,
   personnel: Users,
+  people: Users,
   // Member-role menu only, which is why these two went unnoticed. "Invoicing" holds both
   // sales and purchase invoices, so it takes neither Sales' nor Purchase's icon; "Contacts"
   // is crm-home under a different label, so it shares CRM's.
