@@ -79,3 +79,12 @@ test("the panel route encodes the slug", () => {
   assert.equal(aiPanelPath("firma-ou"), "/app/firma-ou/panel");
   assert.equal(aiPanelPath("a b"), "/app/a%20b/panel");
 });
+
+test("moves and move: the App panel and Chrome panel hand a conversation over", () => {
+  const moves = envelope({ type: "moves", conn: "c1", toChrome: true, toApp: false });
+  assert.deepEqual(parseHostMessage(moves, "c1"), moves);
+  assert.equal(parseHostMessage(moves, "c2"), null, "another connection");
+  const move = envelope({ type: "move", conn: "c1", to: "chrome", session: "s1" });
+  assert.deepEqual(parsePanelMessage(move, "c1"), move);
+  assert.equal(parsePanelMessage(move, null), null);
+});

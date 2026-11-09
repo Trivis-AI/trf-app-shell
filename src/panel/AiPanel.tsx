@@ -19,6 +19,7 @@ import { pageEntityFromPath, pagePath } from "./pageEntity";
 import { composePageContext } from "./pageCompose";
 import { createActionStore, createPageStore, findAction, type AiActionStore, type AiPageStore } from "./pageContext";
 import { actionTypesFor, normaliseActionRequest, normaliseActionResult, normaliseNavigate } from "./hostActions";
+import { chromeTakesOver, mayHaveTrivisExtension, useChromePanel, type ExtensionToShell } from "./chromePanel";
 import {
   EXPAND_OVERSHOOT,
   PAGE_MIN_WIDTH,
@@ -74,6 +75,8 @@ export type AiPanelStatus =
 export interface AiPanel {
   enabled: boolean;
   open: boolean;
+  /** The conversation is in the Chrome panel (the Trivis extension's side panel) in this window. */
+  inChrome: boolean;
   expanded: boolean;
   width: number;
   unread: boolean;
@@ -125,18 +128,26 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   const enabled = opts.enabled && typeof window !== "undefined";
   const panelBase = useMemo(() => devPanelBase() ?? opts.panelBase, [opts.panelBase]);
   const panelOrigin = useMemo(() => originOf(panelBase), [panelBase]);
+  // A conversation moved in from the Chrome panel opens on its session.
+  const [movedSession, setMovedSession] = useState<string | null>(null);
   const src = useMemo(
-    () => (panelBase && slug ? panelBase.replace(/\/+$/, "") + aiPanelPath(slug) : null),
-    [panelBase, slug],
+    () =>
+      panelBase && slug
+        ? panelBase.replace(/\/+$/, "") + aiPanelPath(slug) + (movedSession ? `?session=${encodeURIComponent(movedSession)}` : "")
+        : null,
+    [panelBase, slug, movedSession],
   );
 
   const initial = useMemo(readPanelState, []);
-  const [open, setOpenState] = useState(enabled && initial.open);
+  // With the Trivis extension possibly installed, a panel remembered open waits for its
+  // answer (a few milliseconds): the Chrome panel may be the one to use (chromePanel.ts).
+  const holdForExtension = useMemo(() => enabled && mayHaveTrivisExtension(), [enabled]);
+  const [open, setOpenState] = useState(enabled && initial.open && !holdForExtension);
   const [width, setWidth] = useState(initial.width);
   const [menuCollapsed, setMenuCollapsed] = useState(initial.menuCollapsed);
   const [expanded, setExpanded] = useState(false);
   const [unread, setUnread] = useState(false);
-  const [mounted, setMounted] = useState(enabled && initial.open);
+  const [mounted, setMounted] = useState(enabled && initial.open && !holdForExtension);
   const [dragging, setDragging] = useState(false);
   const [viewport, setViewport] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
   // The width transition is off for the first paint so a panel restored open does not
@@ -164,6 +175,19 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   const resetSentRef = useRef(false);
 
   const hostIdentity = useMemo(() => identityFromToken(orgToken), [orgToken]);
+
+  // The Chrome panel, when the Trivis extension is installed (chromePanel.ts).
+  const extMessageRef = useRef<(msg: Exclude<ExtensionToShell, { type: "state" }>) => void>(() => undefined);
+  const extHello = useMemo(
+    () => (enabled && slug && hostIdentity ? { slug, account: hostIdentity.account, org: hostIdentity.org, app: opts.appId ?? "" } : null),
+    [enabled, slug, hostIdentity, opts.appId],
+  );
+  const chromePanel = useChromePanel({ enabled, hello: extHello, onMessage: (msg) => extMessageRef.current(msg) });
+  const chromeRef = useRef(chromePanel);
+  chromeRef.current = chromePanel;
+  const takenOver = chromeTakesOver(chromePanel);
+  // A move into the App panel opens it while the Chrome panel is still reported open for a moment.
+  const movingInRef = useRef(0);
   const canDock = maxPanelWidth(viewport) >= PANEL_MIN_WIDTH;
 
   const status: AiPanelStatus = !mounted || !src
@@ -213,6 +237,43 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
       else post({ type: "context", conn, ...ctx, version });
     },
     [composeContext, post],
+  );
+
+  // The AI proposed; the page acts through the handler it registered for this type
+  // (useAiPageActions), on this pathname, one at a time. The person decides in the page's
+  // own dialog under their own token; the outcome per record goes back. The request comes
+  // from the App panel's iframe or, relayed by the extension, from the Chrome panel.
+  const runAction = useCallback(
+    (raw: unknown, reply: (result: AiActionResult) => void) => {
+      const req = normaliseActionRequest(raw);
+      if (!req) {
+        reply({ status: "failed" });
+        return;
+      }
+      const entry = findAction(actionStore.current.value, req.action, latest.current.pathname);
+      if (!entry) {
+        reply({ status: "unsupported" });
+        return;
+      }
+      if (actionBusyRef.current) {
+        reply({ status: "busy" });
+        return;
+      }
+      actionBusyRef.current = true;
+      let run: Promise<AiActionResult>;
+      try {
+        run = entry.run(req);
+      } catch {
+        run = Promise.resolve({ status: "failed" });
+      }
+      run.then(
+        (result) => reply(normaliseActionResult(result)),
+        () => reply({ status: "failed" }),
+      ).finally(() => {
+        actionBusyRef.current = false;
+      });
+    },
+    [actionStore],
   );
 
   useEffect(() => {
@@ -291,43 +352,25 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
           // A send is pending: answer from the latest committed page, not the debounced one.
           postContext(msg.request);
           return;
-        case "action-request": {
-          // The AI proposed; the page acts through the handler it registered for this type
-          // (useAiPageActions), on this pathname, one at a time. The person decides in the
-          // page's own dialog under their own token; the outcome per record goes back.
-          const reply = (result: AiActionResult) => post({ type: "action-result", conn: msg.conn, request: msg.request, ...result });
-          const req = normaliseActionRequest(msg);
-          if (!req) {
-            reply({ status: "failed" });
-            return;
-          }
-          const entry = findAction(actionStore.current.value, req.action, cur.pathname);
-          if (!entry) {
-            reply({ status: "unsupported" });
-            return;
-          }
-          if (actionBusyRef.current) {
-            reply({ status: "busy" });
-            return;
-          }
-          actionBusyRef.current = true;
-          let run: Promise<AiActionResult>;
-          try {
-            run = entry.run(req);
-          } catch {
-            run = Promise.resolve({ status: "failed" });
-          }
-          run.then(
-            (result) => reply(normaliseActionResult(result)),
-            () => reply({ status: "failed" }),
-          ).finally(() => {
-            actionBusyRef.current = false;
-          });
+        case "action-request":
+          runAction(msg, (result) => post({ type: "action-result", conn: msg.conn, request: msg.request, ...result }));
           return;
-        }
         case "navigate": {
           const target = normaliseNavigate(msg);
           if (target) cur.onNavigate?.(target);
+          return;
+        }
+        case "move": {
+          // Into the Chrome panel: still inside the person's click in the panel, which Chrome
+          // passes up to this page, so the extension may open its side panel.
+          const cp = chromeRef.current;
+          if (msg.to !== "chrome" || cp.available !== true) return;
+          cp.openPanel(msg.session, (opened) => {
+            if (!opened) return;
+            restoredOpenRef.current = false;
+            setOpenState(false);
+            setExpanded(false);
+          });
           return;
         }
         case "reset":
@@ -337,7 +380,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [enabled, panelOrigin, post, postContext, actionStore]);
+  }, [enabled, panelOrigin, post, postContext, runAction]);
 
   // A panel signed in as someone else, or for another org, is told so once and gets nothing more.
   useEffect(() => {
@@ -412,7 +455,101 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
     },
     [enabled, canDock],
   );
-  const toggle = useCallback(() => setOpen(!open), [open, setOpen]);
+  // The AI button and ⌘J: the Chrome panel when it stands in for the App panel. Called inside
+  // the click or key press, which is what lets the extension open its side panel.
+  const toggle = useCallback(() => {
+    const cp = chromeRef.current;
+    if (chromeTakesOver(cp)) {
+      if (cp.open) cp.closePanel();
+      else cp.openPanel(null);
+      return;
+    }
+    setOpen(!open);
+  }, [open, setOpen]);
+
+  // A panel remembered open opens once the extension has answered, unless the Chrome panel
+  // stands in for it.
+  useEffect(() => {
+    if (!holdForExtension || chromePanel.available === null) return;
+    if (initial.open && !chromeTakesOver(chromeRef.current)) {
+      setOpenState(true);
+      setMounted(true);
+    }
+    // Once, when the answer arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chromePanel.available]);
+
+  // One panel at a time: when the Chrome panel takes over, the App panel closes.
+  useEffect(() => {
+    if (!takenOver || !open) return;
+    if (Date.now() - movingInRef.current < 3000) return;
+    restoredOpenRef.current = false;
+    setOpenState(false);
+    setExpanded(false);
+  }, [takenOver, open]);
+
+  // Which moves the App panel offers: into the Chrome panel, in the extension's "move" mode.
+  useEffect(() => {
+    if (!ready || !connRef.current) return;
+    post({ type: "moves", conn: connRef.current, toChrome: chromePanel.available === true && chromePanel.mode === "move", toApp: false });
+  }, [ready, chromePanel.available, chromePanel.mode, post]);
+
+  // While the Chrome panel looks at this tab, it hears the page as the App panel would.
+  const postExtContext = useCallback(
+    (snapshotFor?: string) => {
+      const ctx = composeContext();
+      if (!ctx) return;
+      contextVersion.current += 1;
+      const version = contextVersion.current;
+      if (snapshotFor !== undefined) chromeRef.current.send({ type: "context-snapshot", request: snapshotFor, ...ctx, version });
+      else chromeRef.current.send({ type: "context", ...ctx, version });
+    },
+    [composeContext],
+  );
+  const extActive = chromePanel.active;
+  useEffect(() => {
+    if (!extActive) return;
+    postExtContext();
+  }, [extActive, opts.appId, opts.pathname, postExtContext]);
+  useEffect(() => {
+    if (!extActive) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        postExtContext();
+      }, CONTEXT_DEBOUNCE_MS);
+    };
+    const unsubscribe = pageStore.subscribe(schedule);
+    const unsubscribeActions = actionStore.subscribe(schedule);
+    return () => {
+      unsubscribe();
+      unsubscribeActions();
+      if (timer) clearTimeout(timer);
+    };
+  }, [extActive, pageStore, actionStore, postExtContext]);
+  extMessageRef.current = (msg) => {
+    switch (msg.type) {
+      case "context-request":
+        postExtContext(msg.request);
+        return;
+      case "action-request":
+        runAction(msg, (result) => chromeRef.current.send({ type: "action-result", request: msg.request, ...result }));
+        return;
+      case "navigate": {
+        const target = normaliseNavigate(msg);
+        if (target) latest.current.onNavigate?.(target);
+        return;
+      }
+      case "open-app-panel":
+        // The conversation moves from the Chrome panel into this tab's App panel.
+        movingInRef.current = Date.now();
+        setMovedSession(msg.session);
+        setOpen(true);
+        return;
+    }
+  };
 
   // Sizes are remembered as they are; open only while the panel holds a conversation.
   useEffect(() => {
@@ -476,6 +613,7 @@ export function useAiPanel(opts: AiPanelOptions): AiPanel {
   return {
     enabled,
     open,
+    inChrome: chromePanel.open,
     expanded: open && expanded,
     width,
     unread,
@@ -534,12 +672,12 @@ export function AiPanelButton({ ai, className }: { ai: AiPanel; className?: stri
       variant="ghost"
       size="icon"
       aria-label="AI"
-      aria-pressed={ai.open}
+      aria-pressed={ai.open || ai.inChrome}
       title={shellText("<trn-shell-ai-shortcut>", "AI (⌘J)")}
       onClick={ai.toggle}
       className={cn(
         "relative size-8 text-muted-foreground hover:text-foreground",
-        ai.open && "bg-accent text-foreground",
+        (ai.open || ai.inChrome) && "bg-accent text-foreground",
         className,
       )}
     >

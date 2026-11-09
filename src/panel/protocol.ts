@@ -138,6 +138,17 @@ export interface AiNavigateTarget {
   path: string;
 }
 
+/**
+ * The two places the conversation can live (extension docs/PLAN.md section 9): the App panel,
+ * this iframe docked in the shell, and the Chrome panel, the Trivis Chrome extension's side
+ * panel, which embeds the same route. `toChrome`: the App panel may move into the Chrome
+ * panel. `toApp`: the Chrome panel may move into the App panel of the Trivis tab it is next to.
+ */
+export interface AiPanelMoves {
+  toChrome: boolean;
+  toApp: boolean;
+}
+
 /** Page to panel. */
 export type AiHostMessage =
   | { type: "init"; conn: string; slug: string; theme: AiTheme; lang: string; visible: boolean; expanded: boolean }
@@ -151,6 +162,8 @@ export type AiHostMessage =
   | ({ type: "context-snapshot"; conn: string; request: string } & AiPageContext)
   /** The outcome of an `action-request`, with the same request id, once the person has acted. */
   | ({ type: "action-result"; conn: string; request: string } & AiActionResult)
+  /** Which moves between the App panel and the Chrome panel the host offers right now. */
+  | ({ type: "moves"; conn: string } & AiPanelMoves)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -169,6 +182,8 @@ export type AiPanelMessage =
   | ({ type: "action-request"; conn: string; request: string } & AiActionRequest)
   /** Asks the host to open a route, in this app or another; validated by the host. */
   | ({ type: "navigate"; conn: string } & AiNavigateTarget)
+  /** Moves this conversation into the other panel; `session` is the conversation, null for a fresh one. */
+  | { type: "move"; conn: string; to: "chrome" | "app"; session: string | null }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -177,8 +192,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "reset"]);
 
 /**
  * Unwraps a bridge message, or returns null for anything else: other postMessage

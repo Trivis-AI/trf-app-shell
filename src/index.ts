@@ -27,6 +27,11 @@ export type {
   AiActionItem, AiActionRequest, AiActionItemStatus, AiActionItemResult, AiActionStatus, AiActionResult, AiNavigateTarget,
 } from "./panel/protocol";
 export type { AiPanelStatus } from "./panel/AiPanel";
+export type { AiPanelMoves } from "./panel/protocol";
+// The Chrome panel (the Trivis extension's side panel): which extension IDs this environment
+// trusts, for frontai's list of who may embed the panel.
+export { trivisExtensionIds } from "./panel/chromePanel";
+export type { ChromePanelMode } from "./panel/chromePanel";
 // Pages declare what they show (page key, record, list, selection) for the panel's chip and
 // every turn's page_context; the shell answers the panel's send-time snapshot from it. And
 // what they can do for it: a handler per action type, run on the panel's `action-request`.
