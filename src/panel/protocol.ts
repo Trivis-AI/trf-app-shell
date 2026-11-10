@@ -214,6 +214,40 @@ export interface AiLookResult {
   controls?: AiLookControl[];
 }
 
+/*
+ * Known flows (extension docs/PLAN.md section 10, decision D34). On a site the extension has
+ * a flow for, it presses a short, fixed list of controls in the tab for the person, each one
+ * ringed on the page first, and the panel then looks at the page it ends on. The steps
+ * belong to the extension: the panel names a flow by its id and never says what to press,
+ * and a flow starts only on the person's press of its button in the panel.
+ */
+
+export type AiFlowStatus =
+  /** Carried out: the tab is on the flow's last page, on `site`, ready to be looked at. */
+  | "ok"
+  /** The person stopped it. */
+  | "stopped"
+  | "failed";
+
+export interface AiFlowResult {
+  status: AiFlowStatus;
+  /**
+   * Why, for "failed": "not-found" (`label` is the control that was looked for), "secret" (a
+   * sign-in screen), "left" (the tab is elsewhere now), "busy", "unknown", "unreachable",
+   * "timeout".
+   */
+  reason?: string;
+  label?: string;
+  site?: string;
+}
+
+/** The control a flow is about to press: its place in the list and its label on the page. */
+export interface AiFlowProgress {
+  step: number;
+  of: number;
+  label: string;
+}
+
 /** The largest text of a page one look carries, and the largest file (a PDF in the tab). */
 export const AI_LOOK_MAX_TEXT_BYTES = 100 * 1024;
 export const AI_LOOK_MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -247,6 +281,12 @@ export type AiHostMessage =
   | { type: "look-changed"; conn: string; left?: boolean }
   /** The outcome of a `point`: whether the control was found and ringed, and its label. */
   | { type: "point-result"; conn: string; request: string; pointed: boolean; reason?: AiPointReason; label?: string }
+  /** The known flows the site in the tab offers right now, by id; empty when it offers none. */
+  | { type: "flows"; conn: string; flows: string[] }
+  /** A flow the panel asked for is about to press this control. */
+  | ({ type: "flow-progress"; conn: string; request: string } & AiFlowProgress)
+  /** How a `flow-run` ended, with the same request id. */
+  | ({ type: "flow-result"; conn: string; request: string } & AiFlowResult)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -287,6 +327,13 @@ export type AiPanelMessage =
    * few seconds; nothing is pressed. Answered with `point-result`.
    */
   | { type: "point"; conn: string; request: string; look: string; control: number }
+  /**
+   * The person pressed a known flow's button: the host carries that flow out in the tab.
+   * Answered with `flow-progress` before each press and one `flow-result`.
+   */
+  | { type: "flow-run"; conn: string; request: string; flow: string }
+  /** The person stopped the flow: it ends before its next press. */
+  | { type: "flow-stop"; conn: string; request: string }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -295,9 +342,21 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "flows", "flow-progress", "flow-result", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "flow-run", "flow-stop", "reset"]);
 const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
+const FLOW_STATUSES = new Set(["ok", "stopped", "failed"]);
+const FLOW_ID_RE = /^[a-z][a-z0-9-]{0,40}$/;
+const FLOW_LABEL_MAX = 80;
+
+/** A flow message from the host with the shape the panel relies on: known ids, bounded text. */
+function validFlowMessage(m: Record<string, unknown>): boolean {
+  if (m.type === "flows") return Array.isArray(m.flows) && m.flows.length <= 20 && m.flows.every((f) => typeof f === "string" && FLOW_ID_RE.test(f));
+  if (typeof m.request !== "string" || m.request === "") return false;
+  if (m.label !== undefined && (typeof m.label !== "string" || m.label.length > FLOW_LABEL_MAX)) return false;
+  if (m.type === "flow-progress") return Number.isInteger(m.step) && Number.isInteger(m.of) && typeof m.label === "string";
+  return typeof m.status === "string" && FLOW_STATUSES.has(m.status) && (m.site === undefined || typeof m.site === "string");
+}
 
 /**
  * Checks the parts of a `look-result` the size bound does not see: a known status, and for
@@ -347,6 +406,7 @@ export function parseHostMessage(data: unknown, conn: string | null): AiHostMess
   }
   const m = parse(data, HOST_TYPES, conn);
   if (m && m.type === "look-result" && !validLookResult(m)) return null;
+  if (m && (m.type === "flows" || m.type === "flow-progress" || m.type === "flow-result") && !validFlowMessage(m)) return null;
   return m as AiHostMessage | null;
 }
 

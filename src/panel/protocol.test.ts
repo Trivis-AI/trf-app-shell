@@ -126,6 +126,28 @@ test("following a tab: on and off from the panel, the page changes from the host
   assert.deepEqual(parseHostMessage(left, "c1"), left);
 });
 
+test("a known flow: offered and reported by the host, run and stopped by the panel", () => {
+  const offer = envelope({ type: "flows", conn: "c1", flows: ["merit-accounts"] });
+  assert.deepEqual(parseHostMessage(offer, "c1"), offer);
+  assert.equal(parsePanelMessage(offer, "c1"), null, "a host type sent by a panel");
+  assert.deepEqual(parseHostMessage(envelope({ type: "flows", conn: "c1", flows: [] }), "c1")?.type, "flows");
+  assert.equal(parseHostMessage(envelope({ type: "flows", conn: "c1", flows: ["Not An Id"] }), "c1"), null, "an id is a short lower-case tag");
+  assert.equal(parseHostMessage(envelope({ type: "flows", conn: "c1" }), "c1"), null);
+  const run = envelope({ type: "flow-run", conn: "c1", request: "r6", flow: "merit-accounts" });
+  assert.deepEqual(parsePanelMessage(run, "c1"), run);
+  assert.equal(parseHostMessage(run, "c1"), null, "a panel type sent by a host");
+  const stop = envelope({ type: "flow-stop", conn: "c1", request: "r6" });
+  assert.deepEqual(parsePanelMessage(stop, "c1"), stop);
+  const progress = envelope({ type: "flow-progress", conn: "c1", request: "r6", step: 1, of: 2, label: "Seadistused" });
+  assert.deepEqual(parseHostMessage(progress, "c1"), progress);
+  assert.equal(parseHostMessage(envelope({ type: "flow-progress", conn: "c1", request: "r6", step: 1, of: 2, label: "x".repeat(81) }), "c1"), null, "a label is bounded: it comes from a web page");
+  const done = envelope({ type: "flow-result", conn: "c1", request: "r6", status: "ok", site: "aktiva.merit.ee" });
+  assert.deepEqual(parseHostMessage(done, "c1"), done);
+  const missing = envelope({ type: "flow-result", conn: "c1", request: "r6", status: "failed", reason: "not-found", label: "Kontoplaan" });
+  assert.deepEqual(parseHostMessage(missing, "c1"), missing);
+  assert.equal(parseHostMessage(envelope({ type: "flow-result", conn: "c1", request: "r6", status: "pressed" }), "c1"), null, "an unknown status");
+});
+
 test("oversized payloads are dropped", () => {
   const big = envelope({ type: "unread", conn: "c1", unread: true, pad: "x".repeat(AI_BRIDGE_MAX_BYTES) });
   assert.equal(parsePanelMessage(big, "c1"), null);

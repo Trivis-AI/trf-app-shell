@@ -104,7 +104,10 @@ unless the person changed the menu by hand meanwhile; it reads the menu's real w
 `look-follow`, `point` from the panel, `look-changed` from the host: a look lists the page's
 controls by number, `point` asks the host to ring one of them, nothing pressed, and while the
 panel follows a tab the host says when its page changed so the panel can look again;
-extension `docs/PLAN.md` section 10). Only the Chrome extension's host speaks it: the shell never
+extension `docs/PLAN.md` section 10), and known flows (`flows`, `flow-progress`, `flow-result`
+from the host; `flow-run`, `flow-stop` from the panel: on a site the extension has a flow for,
+the panel names it by id and the extension presses its own fixed list of controls in the tab;
+the panel never says what to press). Only the Chrome extension's host speaks it: the shell never
 sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
 fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its
 kind (`AI_LOOK_MAX_TEXT_BYTES`, `AI_LOOK_MAX_FILE_BYTES`). Tests: `node --test
