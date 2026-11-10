@@ -98,6 +98,21 @@ test("a look result carries the read as a Blob, bounded by its kind and outside 
   assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "file", page, blob: pdf }), "c1"), null, "a file without a name");
 });
 
+test("pointing at a control: the look's controls with the result, the request from the panel, the answer from the host", () => {
+  const page = { url: "https://bank.example/statement", title: "Statement", site: "bank.example" };
+  const controls = [{ n: 1, kind: "button", label: "Salvesta faili" }, { n: 2, kind: "field", label: "Vorming" }];
+  const ok = envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "page", page, blob: new Blob(["text"]), controls });
+  assert.equal(parseHostMessage(ok, "c1"), ok);
+  const point = envelope({ type: "point", conn: "c1", request: "r4", look: "r3", control: 1 });
+  assert.deepEqual(parsePanelMessage(point, "c1"), point);
+  assert.equal(parseHostMessage(point, "c1"), null, "a panel type sent by a host");
+  const answer = envelope({ type: "point-result", conn: "c1", request: "r4", pointed: true, label: "Salvesta faili" });
+  assert.deepEqual(parseHostMessage(answer, "c1"), answer);
+  assert.equal(parsePanelMessage(answer, "c1"), null, "a host type sent by a panel");
+  const moved = envelope({ type: "point-result", conn: "c1", request: "r4", pointed: false, reason: "moved" });
+  assert.deepEqual(parseHostMessage(moved, "c1"), moved);
+});
+
 test("oversized payloads are dropped", () => {
   const big = envelope({ type: "unread", conn: "c1", unread: true, pad: "x".repeat(AI_BRIDGE_MAX_BYTES) });
   assert.equal(parsePanelMessage(big, "c1"), null);

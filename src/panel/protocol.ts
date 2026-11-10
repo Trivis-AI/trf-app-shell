@@ -187,6 +187,20 @@ export interface AiLookPage {
   site: string;
 }
 
+/**
+ * A control of the page a look read: a button, a link or a form field, by its number in the
+ * look's list and its label. Never a field's value. The panel shows the label where the
+ * assistant names a control, and asks the host to point at it by the number.
+ */
+export interface AiLookControl {
+  n: number;
+  kind: "button" | "link" | "field";
+  label: string;
+}
+
+/** Why a control could not be pointed at: no such number, the tab is elsewhere, or the page no longer has it. */
+export type AiPointReason = "unknown" | "moved" | "gone" | "unreachable";
+
 export interface AiLookResult {
   status: AiLookStatus;
   /** Why, for a status that is not "ok": "site", "timeout", "restricted", "secret", ... */
@@ -196,6 +210,8 @@ export interface AiLookResult {
   kind?: "page" | "file";
   blob?: Blob;
   name?: string;
+  /** The page's controls as the look listed them, for pointing at one by its number. */
+  controls?: AiLookControl[];
 }
 
 /** The largest text of a page one look carries, and the largest file (a PDF in the tab). */
@@ -223,6 +239,8 @@ export type AiHostMessage =
   | { type: "look-progress"; conn: string; request: string; state: AiLookState }
   /** The outcome of a `look-request`, with the same request id. */
   | ({ type: "look-result"; conn: string; request: string } & AiLookResult)
+  /** The outcome of a `point`: whether the control was found and ringed, and its label. */
+  | { type: "point-result"; conn: string; request: string; pointed: boolean; reason?: AiPointReason; label?: string }
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -247,6 +265,12 @@ export type AiPanelMessage =
   | { type: "look-request"; conn: string; request: string }
   /** The panel is done with a look (answered, failed or taken back): the host stops showing it. */
   | { type: "look-end"; conn: string; request: string }
+  /**
+   * Asks the host to point at a control of the page a look read: `look` is that look's
+   * request id, `control` the number in its list. The host scrolls to it and rings it for a
+   * few seconds; nothing is pressed. Answered with `point-result`.
+   */
+  | { type: "point"; conn: string; request: string; look: string; control: number }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -255,8 +279,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "point-result", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "point", "reset"]);
 const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
 
 /**
