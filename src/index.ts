@@ -28,6 +28,9 @@ export type {
 } from "./panel/protocol";
 export type { AiPanelStatus } from "./panel/AiPanel";
 export type { AiPanelMoves } from "./panel/protocol";
+// A look at the web page in the tab next to the Chrome panel (extension docs/PLAN.md section 10).
+export { AI_LOOK_MAX_TEXT_BYTES, AI_LOOK_MAX_FILE_BYTES } from "./panel/protocol";
+export type { AiLookOffer, AiLookState, AiLookStatus, AiLookPage, AiLookResult } from "./panel/protocol";
 // The Chrome panel (the Trivis extension's side panel): which extension IDs this environment
 // trusts, for frontai's list of who may embed the panel; and the hook, for the AI app's big
 // chat, which has no App panel but hands its conversation to the Chrome panel and back.

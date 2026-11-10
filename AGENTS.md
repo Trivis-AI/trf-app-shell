@@ -99,7 +99,12 @@ added. `PanelMenuFit` (inside the SidebarProvider) collapses the
 left menu to its rail when the docked panel would push the page under 720 px, remembers that in
 the cookie's third field (`open.width.menu`) and expands the menu again when the panel closes,
 unless the person changed the menu by hand meanwhile; it reads the menu's real width from ui2
-7.23.0's `useSidebar().width`, which is user-adjustable there. Tests: `node --test
+7.23.0's `useSidebar().width`, which is user-adjustable there. The protocol also carries a look at the web page in the browser tab (`look`,
+`look-progress`, `look-result` from the host; `look-request`, `look-end` from the panel;
+extension `docs/PLAN.md` section 10). Only the Chrome extension's host speaks it: the shell never
+sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
+fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its
+kind (`AI_LOOK_MAX_TEXT_BYTES`, `AI_LOOK_MAX_FILE_BYTES`). Tests: `node --test
 src/panel/*.test.ts`.
 
 ## Appearance and the first paint

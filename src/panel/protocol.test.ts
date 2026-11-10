@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   AI_BRIDGE_MAX_BYTES,
+  AI_LOOK_MAX_TEXT_BYTES,
   aiPanelPath,
   envelope,
   identityFromToken,
@@ -61,6 +62,40 @@ test("host actions: the request from the panel, the result from the host, naviga
   assert.equal(parsePanelMessage(result, "c1"), null, "a host type sent by a panel");
   const nav = envelope({ type: "navigate", conn: "c1", app: "purchase", path: "/invoices" });
   assert.deepEqual(parsePanelMessage(nav, "c1"), nav);
+});
+
+test("a look: the request and its end from the panel, the offer, progress and result from the host", () => {
+  const request = envelope({ type: "look-request", conn: "c1", request: "r3" });
+  assert.deepEqual(parsePanelMessage(request, "c1"), request);
+  assert.equal(parseHostMessage(request, "c1"), null, "a panel type sent by a host");
+  const end = envelope({ type: "look-end", conn: "c1", request: "r3" });
+  assert.deepEqual(parsePanelMessage(end, "c1"), end);
+  const offer = envelope({ type: "look", conn: "c1", available: false, reason: "restricted" });
+  assert.deepEqual(parseHostMessage(offer, "c1"), offer);
+  assert.equal(parsePanelMessage(offer, "c1"), null, "a host type sent by a panel");
+  const progress = envelope({ type: "look-progress", conn: "c1", request: "r3", state: "icon" });
+  assert.deepEqual(parseHostMessage(progress, "c1"), progress);
+  const denied = envelope({ type: "look-result", conn: "c1", request: "r3", status: "denied", reason: "site" });
+  assert.deepEqual(parseHostMessage(denied, "c1"), denied);
+  assert.equal(parseHostMessage(denied, "c2"), null, "another connection");
+});
+
+test("a look result carries the read as a Blob, bounded by its kind and outside the bridge's own bound", () => {
+  const page = { url: "https://bank.example/statement", title: "Statement", site: "bank.example" };
+  const text = new Blob(["x".repeat(AI_BRIDGE_MAX_BYTES + 10)], { type: "text/plain" });
+  const ok = envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "page", page, blob: text });
+  assert.equal(parseHostMessage(ok, "c1"), ok, "a page text larger than the bridge bound passes");
+  const tooBig = new Blob(["x".repeat(AI_LOOK_MAX_TEXT_BYTES + 1)], { type: "text/plain" });
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "page", page, blob: tooBig }), "c1"), null);
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "page", page }), "c1"), null, "ok without the read");
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "page", page, blob: "text" }), "c1"), null, "the read is not a Blob");
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", page, blob: text }), "c1"), null, "no kind");
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "done" }), "c1"), null, "an unknown status");
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "denied", blob: text }), "c1"), null, "a refusal carries nothing");
+  const pdf = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+  const file = envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "file", page, blob: pdf, name: "invoice.pdf" });
+  assert.equal(parseHostMessage(file, "c1"), file);
+  assert.equal(parseHostMessage(envelope({ type: "look-result", conn: "c1", request: "r3", status: "ok", kind: "file", page, blob: pdf }), "c1"), null, "a file without a name");
 });
 
 test("oversized payloads are dropped", () => {

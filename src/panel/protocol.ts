@@ -149,6 +149,59 @@ export interface AiPanelMoves {
   toApp: boolean;
 }
 
+/*
+ * A look at the web page in the browser tab (extension docs/PLAN.md section 10). Only the
+ * Chrome panel's host offers it: the Trivis extension reads the page in the tab the panel sits
+ * next to, once, when the person presses the eye, and hands the read to the panel, which
+ * uploads it under the person's own session. The shell never sends `look`, so the App panel
+ * shows no eye. The read travels as a Blob beside the message's own fields: the size bound on
+ * the bridge counts the fields, and `look-result` bounds the Blob itself.
+ */
+
+/** Whether the host can look at the tab right now; `reason` says why not ("restricted"). */
+export interface AiLookOffer {
+  available: boolean;
+  reason?: string;
+}
+
+/** What the host is waiting for or doing with a look: the toolbar icon, or reading the page. */
+export type AiLookState = "icon" | "reading";
+
+export type AiLookStatus =
+  /** The page was read; `blob` holds it. */
+  | "ok"
+  /** The person did not allow the site, or did not click the toolbar icon in time. */
+  | "denied"
+  /** A page that must not or cannot be read: Chrome's own pages, a payment or code screen. */
+  | "blocked"
+  /** More text than one look carries; the person selects a part and looks again. */
+  | "too_large"
+  /** Nothing readable on the page. */
+  | "empty"
+  | "failed";
+
+/** The page a look read: its address, its title and the site as the person knows it. */
+export interface AiLookPage {
+  url: string;
+  title: string;
+  site: string;
+}
+
+export interface AiLookResult {
+  status: AiLookStatus;
+  /** Why, for a status that is not "ok": "site", "timeout", "restricted", "secret", ... */
+  reason?: string;
+  page?: AiLookPage;
+  /** "page": `blob` is the page's text. "file": `blob` is the file the tab shows (a PDF), named `name`. */
+  kind?: "page" | "file";
+  blob?: Blob;
+  name?: string;
+}
+
+/** The largest text of a page one look carries, and the largest file (a PDF in the tab). */
+export const AI_LOOK_MAX_TEXT_BYTES = 100 * 1024;
+export const AI_LOOK_MAX_FILE_BYTES = 20 * 1024 * 1024;
+
 /** Page to panel. */
 export type AiHostMessage =
   | { type: "init"; conn: string; slug: string; theme: AiTheme; lang: string; visible: boolean; expanded: boolean }
@@ -164,6 +217,12 @@ export type AiHostMessage =
   | ({ type: "action-result"; conn: string; request: string } & AiActionResult)
   /** Which moves between the App panel and the Chrome panel the host offers right now. */
   | ({ type: "moves"; conn: string } & AiPanelMoves)
+  /** Whether the host can look at the page in the tab; only the Chrome panel's host says so. */
+  | ({ type: "look"; conn: string } & AiLookOffer)
+  /** A look the panel asked for is waiting for the person, or under way. */
+  | { type: "look-progress"; conn: string; request: string; state: AiLookState }
+  /** The outcome of a `look-request`, with the same request id. */
+  | ({ type: "look-result"; conn: string; request: string } & AiLookResult)
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -184,6 +243,10 @@ export type AiPanelMessage =
   | ({ type: "navigate"; conn: string } & AiNavigateTarget)
   /** Moves this conversation into the other panel; `session` is the conversation, null for a fresh one. */
   | { type: "move"; conn: string; to: "chrome" | "app"; session: string | null }
+  /** The person pressed the eye: look at the page in the tab; posted inside the click. */
+  | { type: "look-request"; conn: string; request: string }
+  /** The panel is done with a look (answered, failed or taken back): the host stops showing it. */
+  | { type: "look-end"; conn: string; request: string }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -192,8 +255,24 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "reset"]);
+const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
+
+/**
+ * Checks the parts of a `look-result` the size bound does not see: a known status, and for
+ * "ok" a Blob within the bound for its kind. A Blob serialises to "{}", so the bridge's own
+ * bound counts only the fields around it.
+ */
+function validLookResult(m: Record<string, unknown>): boolean {
+  if (typeof m.request !== "string" || m.request === "") return false;
+  if (typeof m.status !== "string" || !LOOK_STATUSES.has(m.status)) return false;
+  if (m.status !== "ok") return m.blob === undefined;
+  if (typeof Blob === "undefined" || !(m.blob instanceof Blob) || m.blob.size === 0) return false;
+  if (m.kind === "page") return m.blob.size <= AI_LOOK_MAX_TEXT_BYTES;
+  if (m.kind === "file") return m.blob.size <= AI_LOOK_MAX_FILE_BYTES && typeof m.name === "string" && m.name !== "";
+  return false;
+}
 
 /**
  * Unwraps a bridge message, or returns null for anything else: other postMessage
@@ -226,7 +305,9 @@ export function parseHostMessage(data: unknown, conn: string | null): AiHostMess
     const m = parse(data, HOST_TYPES, typeof (data as { conn?: unknown }).conn === "string" ? (data as { conn: string }).conn : null);
     return m as AiHostMessage | null;
   }
-  return parse(data, HOST_TYPES, conn) as AiHostMessage | null;
+  const m = parse(data, HOST_TYPES, conn);
+  if (m && m.type === "look-result" && !validLookResult(m)) return null;
+  return m as AiHostMessage | null;
 }
 
 export function newConnectionId(): string {
