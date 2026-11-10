@@ -239,6 +239,12 @@ export type AiHostMessage =
   | { type: "look-progress"; conn: string; request: string; state: AiLookState }
   /** The outcome of a `look-request`, with the same request id. */
   | ({ type: "look-result"; conn: string; request: string } & AiLookResult)
+  /**
+   * While the panel follows a tab (`look-follow`): the page in that tab changed, so the
+   * panel may look again. `left`: the tab is no longer on the site that is followed, or the
+   * panel sits next to another tab, and following is over.
+   */
+  | { type: "look-changed"; conn: string; left?: boolean }
   /** The outcome of a `point`: whether the control was found and ringed, and its label. */
   | { type: "point-result"; conn: string; request: string; pointed: boolean; reason?: AiPointReason; label?: string }
   | { type: "reset"; conn: string; reason: string };
@@ -261,8 +267,18 @@ export type AiPanelMessage =
   | ({ type: "navigate"; conn: string } & AiNavigateTarget)
   /** Moves this conversation into the other panel; `session` is the conversation, null for a fresh one. */
   | { type: "move"; conn: string; to: "chrome" | "app"; session: string | null }
-  /** The person pressed the eye: look at the page in the tab; posted inside the click. */
-  | { type: "look-request"; conn: string; request: string }
+  /**
+   * The person pressed the eye: look at the page in the tab; posted inside the click. With
+   * `site` (while following a tab) the page is read only if the tab is still on that site.
+   */
+  | { type: "look-request"; conn: string; request: string; site?: string }
+  /**
+   * Following a tab (extension docs/PLAN.md section 10, guiding): the person asked to be
+   * walked through a flow on `site`. While it is on, the host keeps a steady frame on that
+   * tab's page and says `look-changed` after each page change there. Reading stays with
+   * `look-request`. Off, or the tab leaving the site, ends it.
+   */
+  | { type: "look-follow"; conn: string; on: boolean; site?: string }
   /** The panel is done with a look (answered, failed or taken back): the host stops showing it. */
   | { type: "look-end"; conn: string; request: string }
   /**
@@ -279,8 +295,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "point-result", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "point", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "reset"]);
 const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
 
 /**

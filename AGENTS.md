@@ -101,8 +101,9 @@ the cookie's third field (`open.width.menu`) and expands the menu again when the
 unless the person changed the menu by hand meanwhile; it reads the menu's real width from ui2
 7.23.0's `useSidebar().width`, which is user-adjustable there. The protocol also carries a look at the web page in the browser tab (`look`,
 `look-progress`, `look-result`, `point-result` from the host; `look-request`, `look-end`,
-`point` from the panel: a look lists the page's controls by number, and `point` asks the
-host to ring one of them, nothing pressed;
+`look-follow`, `point` from the panel, `look-changed` from the host: a look lists the page's
+controls by number, `point` asks the host to ring one of them, nothing pressed, and while the
+panel follows a tab the host says when its page changed so the panel can look again;
 extension `docs/PLAN.md` section 10). Only the Chrome extension's host speaks it: the shell never
 sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
 fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its

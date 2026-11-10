@@ -113,6 +113,19 @@ test("pointing at a control: the look's controls with the result, the request fr
   assert.deepEqual(parseHostMessage(moved, "c1"), moved);
 });
 
+test("following a tab: on and off from the panel, the page changes from the host", () => {
+  const on = envelope({ type: "look-follow", conn: "c1", on: true, site: "swedbank.ee" });
+  assert.deepEqual(parsePanelMessage(on, "c1"), on);
+  assert.equal(parseHostMessage(on, "c1"), null, "a panel type sent by a host");
+  const scoped = envelope({ type: "look-request", conn: "c1", request: "r5", site: "swedbank.ee" });
+  assert.deepEqual(parsePanelMessage(scoped, "c1"), scoped);
+  const changed = envelope({ type: "look-changed", conn: "c1" });
+  assert.deepEqual(parseHostMessage(changed, "c1"), changed);
+  assert.equal(parsePanelMessage(changed, "c1"), null, "a host type sent by a panel");
+  const left = envelope({ type: "look-changed", conn: "c1", left: true });
+  assert.deepEqual(parseHostMessage(left, "c1"), left);
+});
+
 test("oversized payloads are dropped", () => {
   const big = envelope({ type: "unread", conn: "c1", unread: true, pad: "x".repeat(AI_BRIDGE_MAX_BYTES) });
   assert.equal(parsePanelMessage(big, "c1"), null);
