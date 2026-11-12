@@ -173,3 +173,20 @@ test("moves and move: the App panel and Chrome panel hand a conversation over", 
   assert.deepEqual(parsePanelMessage(move, "c1"), move);
   assert.equal(parsePanelMessage(move, null), null);
 });
+
+test("the site in the tab: named by the host, with bounded text and an inline icon", () => {
+  const icon = "data:image/png;base64,iVBORw0KGgo=";
+  const named = envelope({ type: "site", conn: "c1", site: { site: "aktiva.merit.ee", title: "Merit Aktiva", icon } });
+  assert.deepEqual(parseHostMessage(named, "c1"), named);
+  assert.equal(parsePanelMessage(named, "c1"), null, "a host type sent by a panel");
+  const plain = envelope({ type: "site", conn: "c1", site: { site: "swedbank.ee", title: "" } });
+  assert.deepEqual(parseHostMessage(plain, "c1"), plain);
+  const none = envelope({ type: "site", conn: "c1", site: null });
+  assert.deepEqual(parseHostMessage(none, "c1"), none);
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1" }), "c1"), null);
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "not a host", title: "" } }), "c1"), null, "a host name only");
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "x".repeat(201) } }), "c1"), null, "a title is bounded: it comes from a web page");
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "", icon: "https://a.ee/favicon.ico" } }), "c1"), null, "an icon is never an address to load");
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "", icon: "data:image/svg+xml;base64,PHN2Zz4=" } }), "c1"), null, "nor an image that can carry script");
+  assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "", icon: "data:image/png;base64," + "A".repeat(25 * 1024) } }), "c1"), null, "and it is small");
+});

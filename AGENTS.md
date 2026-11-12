@@ -107,7 +107,9 @@ panel follows a tab the host says when its page changed so the panel can look ag
 extension `docs/PLAN.md` section 10), and known flows (`flows`, `flow-progress`, `flow-result`
 from the host; `flow-run`, `flow-stop` from the panel: on a site the extension has a flow for,
 the panel names it by id and the extension presses its own fixed list of controls in the tab;
-the panel never says what to press). Only the Chrome extension's host speaks it: the shell never
+the panel never says what to press), and the site in the tab (`site` from the host: host name,
+title and a small inline icon, as Chrome holds them, so the panel can name the site and offer
+what makes sense there; nothing is read from the page for it). Only the Chrome extension's host speaks it: the shell never
 sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
 fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its
 kind (`AI_LOOK_MAX_TEXT_BYTES`, `AI_LOOK_MAX_FILE_BYTES`). Tests: `node --test

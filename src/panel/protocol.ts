@@ -248,6 +248,24 @@ export interface AiFlowProgress {
   label: string;
 }
 
+/*
+ * The site in the tab the Chrome panel sits next to (extension docs/PLAN.md section 10,
+ * decision D35): its host name, the tab's title and its icon, as Chrome holds them. Nothing
+ * is read from the page for it. The panel names the site above its composer and offers what
+ * makes sense there; which site is which kind, and what is offered, is the panel's to say.
+ * Only the Chrome panel's host sends it, and only for a tab the person has let it see.
+ */
+export interface AiTabSite {
+  /** The host name without "www.", as a look names its site. */
+  site: string;
+  title: string;
+  /** The tab's icon as a small image in a data: address: the panel loads nothing from the site. */
+  icon?: string;
+}
+
+export const AI_SITE_TITLE_MAX = 200;
+export const AI_SITE_ICON_MAX = 24 * 1024;
+
 /** The largest text of a page one look carries, and the largest file (a PDF in the tab). */
 export const AI_LOOK_MAX_TEXT_BYTES = 100 * 1024;
 export const AI_LOOK_MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -287,6 +305,8 @@ export type AiHostMessage =
   | ({ type: "flow-progress"; conn: string; request: string } & AiFlowProgress)
   /** How a `flow-run` ended, with the same request id. */
   | ({ type: "flow-result"; conn: string; request: string } & AiFlowResult)
+  /** The site in the tab the panel sits next to, or null where there is none to name. */
+  | { type: "site"; conn: string; site: AiTabSite | null }
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -342,7 +362,7 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "flows", "flow-progress", "flow-result", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "flows", "flow-progress", "flow-result", "site", "reset"]);
 const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "flow-run", "flow-stop", "reset"]);
 const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
 const FLOW_STATUSES = new Set(["ok", "stopped", "failed"]);
@@ -356,6 +376,20 @@ function validFlowMessage(m: Record<string, unknown>): boolean {
   if (m.label !== undefined && (typeof m.label !== "string" || m.label.length > FLOW_LABEL_MAX)) return false;
   if (m.type === "flow-progress") return Number.isInteger(m.step) && Number.isInteger(m.of) && typeof m.label === "string";
   return typeof m.status === "string" && FLOW_STATUSES.has(m.status) && (m.site === undefined || typeof m.site === "string");
+}
+
+const SITE_HOST_RE = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/i;
+const SITE_ICON_RE = /^data:image\/(png|jpeg|webp|gif|x-icon|vnd\.microsoft\.icon);base64,[A-Za-z0-9+/=]+$/;
+
+/** A `site` message with the shape the panel relies on: a host name, bounded text, an icon that is an inline image. */
+function validSiteMessage(m: Record<string, unknown>): boolean {
+  if (m.site === null) return true;
+  if (!m.site || typeof m.site !== "object") return false;
+  const s = m.site as Record<string, unknown>;
+  if (typeof s.site !== "string" || !SITE_HOST_RE.test(s.site)) return false;
+  if (typeof s.title !== "string" || s.title.length > AI_SITE_TITLE_MAX) return false;
+  if (s.icon !== undefined && (typeof s.icon !== "string" || s.icon.length > AI_SITE_ICON_MAX || !SITE_ICON_RE.test(s.icon))) return false;
+  return true;
 }
 
 /**
@@ -407,6 +441,7 @@ export function parseHostMessage(data: unknown, conn: string | null): AiHostMess
   const m = parse(data, HOST_TYPES, conn);
   if (m && m.type === "look-result" && !validLookResult(m)) return null;
   if (m && (m.type === "flows" || m.type === "flow-progress" || m.type === "flow-result") && !validFlowMessage(m)) return null;
+  if (m && m.type === "site" && !validSiteMessage(m)) return null;
   return m as AiHostMessage | null;
 }
 
