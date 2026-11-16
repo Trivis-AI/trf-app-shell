@@ -5,7 +5,7 @@ import {
   Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
   Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Circle,
   Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, User,
-  House, Users, Gauge,
+  House, Users, Gauge, Warehouse, Landmark,
 } from "lucide-react";
 import {
   Sidebar, SidebarProvider, SidebarInset, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
@@ -227,7 +227,10 @@ const PLAN_REFRESH_MIN_MS = 60_000;
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "ai agent": Sparkles, ai: Sparkles, sales: BadgeDollarSign, purchase: Receipt, payments: Wallet,
   products: Package, ledger: ScrollText, reports: PieChart, crm: Handshake,
-  contracts: Signature, "assets and warehouse": CirclePile, tables: Table2, settings: Settings,
+  contracts: Signature, tables: Table2, settings: Settings,
+  // The 2026-11-14 menu split made "Assets and warehouse" two groups, "Assets" and
+  // "Warehouse"; both fell back to Circle. The old label stays for cached menus.
+  assets: Landmark, warehouse: Warehouse, "assets and warehouse": CirclePile,
   personnel: Users,
   people: Users,
   // Member-role menu only, which is why these two went unnoticed. "Invoicing" holds both
