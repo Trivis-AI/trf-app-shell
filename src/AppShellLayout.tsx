@@ -15,7 +15,7 @@ import {
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
   Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher, OrgTag,
 } from "@trf/ui2";
-import { clearLegacyOrgCookies, useRenewingOrgToken } from "@trf/ui2";
+import { clearLegacyOrgCookies, useRenewingOrgToken, RefusalDialogs, LowBalanceNote } from "@trf/ui2";
 import { LiveChangesProvider } from "./live/liveChanges";
 import { useAiPanel, AiPanelButton, AiPanelFrame, PanelMenuFit } from "./panel/AiPanel";
 import { AiPageContextProvider } from "./panel/pageContext";
@@ -289,6 +289,12 @@ function useLangVersion(): void {
     window.addEventListener("trf:lang-changed", h);
     return () => window.removeEventListener("trf:lang-changed", h);
   }, []);
+}
+
+function LowBalanceLine({ slug }: { slug: string }) {
+  const { collapsed } = useSidebar();
+  if (collapsed) return null;
+  return <LowBalanceNote slug={slug} className="block truncate px-4 pb-2" />;
 }
 
 function SidebarBrandInner({ orgName, appLabel, colorKey, color, tag, planLine, lang }: { orgName: string | null; appLabel: string; colorKey?: string; color?: string; tag?: string; planLine?: PlanLine | null; lang: string }) {
@@ -1185,6 +1191,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       </SidebarHeader>
       {/* No top padding: the search sits right under the brand header. */}
       <SidebarContent className="pt-0" onScroll={(e) => setMenuScrolled(e.currentTarget.scrollTop > 0)}>
+        {/* Owners/admins below low_balance_warning: one quiet line (decision 51). */}
+        {slug && appId !== "login" && <LowBalanceLine slug={slug} />}
         <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} />
         {query.trim() ? (
           <div ref={resultsRef}>
@@ -1263,6 +1271,10 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
           <AiPanelFrame ai={ai} />
         </div>
       </SidebarProvider>
+
+      {/* Out of tokens, locked, not in the package, next price range: the API clients
+          raise trf:refusal and this explains it (BUROO-AND-ACCESS.md phase 7). */}
+      <RefusalDialogs />
 
       {/* ⌘K command palette — shares the same flatten/match core as the inline box. */}
       <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}>
