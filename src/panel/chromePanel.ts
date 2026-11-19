@@ -23,12 +23,12 @@ export type ChromePanelMode = "always" | "move";
 
 /**
  * The Trivis extension's IDs per environment: the unpacked development ID (its manifest pins
- * the key) on staging and in local development, the Web Store ID in production once it
- * exists. frontai's panel uses the same list for who may embed it.
+ * the key) on staging and in local development, the Web Store ID in production.
+ * frontai's panel uses the same list for who may embed it.
  */
 const EXTENSION_IDS: Record<string, readonly string[]> = {
   "trf.is": ["fhedlbeinaimjdehdcpbakdkdflcgoil"],
-  "trivis.ee": [],
+  "trivis.ee": ["mglmanjjhalohkhakfkmmfpponlhcpno"],
 };
 
 export function trivisExtensionIds(hostname: string): string[] {

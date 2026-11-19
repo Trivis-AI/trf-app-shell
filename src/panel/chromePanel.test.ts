@@ -6,7 +6,7 @@ import { chromeTakesOver, parseExtensionMessage, trivisExtensionIds } from "./ch
 test("the extension ids follow the environment", () => {
   assert.deepEqual(trivisExtensionIds("invoices.trf.is"), ["fhedlbeinaimjdehdcpbakdkdflcgoil"]);
   assert.deepEqual(trivisExtensionIds("localhost"), ["fhedlbeinaimjdehdcpbakdkdflcgoil"]);
-  assert.deepEqual(trivisExtensionIds("invoices.trivis.ee"), []);
+  assert.deepEqual(trivisExtensionIds("invoices.trivis.ee"), ["mglmanjjhalohkhakfkmmfpponlhcpno"]);
   assert.deepEqual(trivisExtensionIds("example.com"), []);
 });
 
