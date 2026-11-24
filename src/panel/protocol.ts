@@ -272,6 +272,12 @@ export const AI_LOOK_MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 /** Page to panel. */
 export type AiHostMessage =
+  /**
+   * Starts a connection. `slug` is the company the host is in, and the panel must be in the
+   * same one. The Chrome extension may send an empty slug: it has no sign-in of its own and,
+   * with no Trivis tab seen yet, knows no company. The panel it loaded (frontai `/panel`)
+   * finds one by the browser's session, and `ready` says which (extension DECISIONS.md D41).
+   */
   | { type: "init"; conn: string; slug: string; theme: AiTheme; lang: string; visible: boolean; expanded: boolean }
   | { type: "theme"; conn: string; theme: AiTheme }
   | { type: "lang"; conn: string; lang: string }
@@ -367,6 +373,11 @@ export type AiPanelMessage =
    * the panel the host then loads proves both in `ready`, as always.
    */
   | { type: "company-pick"; conn: string; slug: string; org: string }
+  /**
+   * The panel cannot go on, and why. `signed-out`: the browser holds no Trivis session, or
+   * not one that opens this company. From the Chrome panel's start page also `no-company`
+   * (the account has none yet) and `unreachable` (no answer about the person's companies).
+   */
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
