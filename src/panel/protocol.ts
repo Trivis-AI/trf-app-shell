@@ -315,9 +315,11 @@ export type AiHostMessage =
   | { type: "site"; conn: string; site: AiTabSite | null }
   /**
    * Which company the Chrome panel's chat is in is the host's to decide (extension
-   * docs/PLAN.md section 11). `pick`: the host takes a `company-pick` right now. It does
-   * beside any site but Trivis; beside a Trivis tab the chat is in that tab's company. A
-   * host that never says `company` takes no pick at all, and the panel offers none.
+   * docs/PLAN.md section 11). `pick`: the host takes a `company-pick` right now. Up to
+   * extension 0.14.1 only beside a site that is not Trivis; from 0.14.2 everywhere: beside
+   * a Trivis tab the chat is in that tab's company, so the extension sends the tab to the
+   * picked one and the chat follows it. A host that never says `company` takes no pick at
+   * all, and the panel offers none.
    */
   | { type: "company"; conn: string; pick: boolean }
   | { type: "reset"; conn: string; reason: string };
