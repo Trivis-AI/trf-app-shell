@@ -307,6 +307,13 @@ export type AiHostMessage =
   | ({ type: "flow-result"; conn: string; request: string } & AiFlowResult)
   /** The site in the tab the panel sits next to, or null where there is none to name. */
   | { type: "site"; conn: string; site: AiTabSite | null }
+  /**
+   * Which company the Chrome panel's chat is in is the host's to decide (extension
+   * docs/PLAN.md section 11). `pick`: the host takes a `company-pick` right now. It does
+   * beside any site but Trivis; beside a Trivis tab the chat is in that tab's company. A
+   * host that never says `company` takes no pick at all, and the panel offers none.
+   */
+  | { type: "company"; conn: string; pick: boolean }
   | { type: "reset"; conn: string; reason: string };
 
 /** Panel to page. */
@@ -354,6 +361,12 @@ export type AiPanelMessage =
   | { type: "flow-run"; conn: string; request: string; flow: string }
   /** The person stopped the flow: it ends before its next press. */
   | { type: "flow-stop"; conn: string; request: string }
+  /**
+   * The person picked another of their companies in the panel's header: the host opens the
+   * chat for it, as it would for a Trivis tab of that company. `org` is that company's id;
+   * the panel the host then loads proves both in `ready`, as always.
+   */
+  | { type: "company-pick"; conn: string; slug: string; org: string }
   | { type: "reset"; conn: string; reason: string };
 
 type Envelope = { trf: typeof AI_BRIDGE_MARKER; v: typeof AI_BRIDGE_VERSION };
@@ -362,8 +375,8 @@ export function envelope<T extends object>(msg: T): T & Envelope {
   return { trf: AI_BRIDGE_MARKER, v: AI_BRIDGE_VERSION, ...msg };
 }
 
-const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "flows", "flow-progress", "flow-result", "site", "reset"]);
-const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "flow-run", "flow-stop", "reset"]);
+const HOST_TYPES = new Set(["init", "theme", "lang", "focus", "visibility", "context", "context-snapshot", "action-result", "moves", "look", "look-progress", "look-result", "look-changed", "point-result", "flows", "flow-progress", "flow-result", "site", "company", "reset"]);
+const PANEL_TYPES = new Set(["loaded", "ready", "close", "expand", "collapse", "unread", "conversation", "context-request", "action-request", "navigate", "move", "look-request", "look-end", "look-follow", "point", "flow-run", "flow-stop", "company-pick", "reset"]);
 const LOOK_STATUSES = new Set(["ok", "denied", "blocked", "too_large", "empty", "failed"]);
 const FLOW_STATUSES = new Set(["ok", "stopped", "failed"]);
 const FLOW_ID_RE = /^[a-z][a-z0-9-]{0,40}$/;
@@ -428,8 +441,15 @@ function parse(data: unknown, types: Set<string>, conn: string | null): Record<s
   return m;
 }
 
+// A company as a pick names it: the slug of its routes and its id (the shapes the shell's
+// hello to the extension is held to, chromePanel.ts).
+const COMPANY_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+const COMPANY_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+
 export function parsePanelMessage(data: unknown, conn: string | null): AiPanelMessage | null {
-  return parse(data, PANEL_TYPES, conn) as AiPanelMessage | null;
+  const m = parse(data, PANEL_TYPES, conn);
+  if (m && m.type === "company-pick" && (typeof m.slug !== "string" || !COMPANY_SLUG_RE.test(m.slug) || typeof m.org !== "string" || !COMPANY_ID_RE.test(m.org))) return null;
+  return m as AiPanelMessage | null;
 }
 
 export function parseHostMessage(data: unknown, conn: string | null): AiHostMessage | null {
@@ -442,6 +462,7 @@ export function parseHostMessage(data: unknown, conn: string | null): AiHostMess
   if (m && m.type === "look-result" && !validLookResult(m)) return null;
   if (m && (m.type === "flows" || m.type === "flow-progress" || m.type === "flow-result") && !validFlowMessage(m)) return null;
   if (m && m.type === "site" && !validSiteMessage(m)) return null;
+  if (m && m.type === "company" && typeof m.pick !== "boolean") return null;
   return m as AiHostMessage | null;
 }
 

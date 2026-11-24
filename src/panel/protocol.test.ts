@@ -190,3 +190,21 @@ test("the site in the tab: named by the host, with bounded text and an inline ic
   assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "", icon: "data:image/svg+xml;base64,PHN2Zz4=" } }), "c1"), null, "nor an image that can carry script");
   assert.equal(parseHostMessage(envelope({ type: "site", conn: "c1", site: { site: "a.ee", title: "", icon: "data:image/png;base64," + "A".repeat(25 * 1024) } }), "c1"), null, "and it is small");
 });
+
+test("the company the chat is in: the host says whether it takes a pick, the panel names one", () => {
+  const offer = envelope({ type: "company", conn: "c1", pick: true });
+  assert.deepEqual(parseHostMessage(offer, "c1"), offer);
+  const locked = envelope({ type: "company", conn: "c1", pick: false });
+  assert.deepEqual(parseHostMessage(locked, "c1"), locked);
+  assert.equal(parseHostMessage(envelope({ type: "company", conn: "c1" }), "c1"), null, "pick is yes or no");
+  assert.equal(parseHostMessage(envelope({ type: "company", conn: "c1", pick: "yes" }), "c1"), null);
+  assert.equal(parsePanelMessage(offer, "c1"), null, "a host type sent by a panel");
+
+  const pick = envelope({ type: "company-pick", conn: "c1", slug: "honestmistake_12", org: "66666666-6666-4666-8666-666666666666" });
+  assert.deepEqual(parsePanelMessage(pick, "c1"), pick);
+  assert.equal(parsePanelMessage(pick, "c2"), null, "an older connection");
+  assert.equal(parseHostMessage(pick, "c1"), null, "a panel type sent by a host");
+  assert.equal(parsePanelMessage(envelope({ type: "company-pick", conn: "c1", slug: "honestmistake_12" }), "c1"), null, "the company's id comes with it");
+  assert.equal(parsePanelMessage(envelope({ type: "company-pick", conn: "c1", slug: "../chat", org: "66666666-6666-4666-8666-666666666666" }), "c1"), null, "a slug, not a path");
+  assert.equal(parsePanelMessage(envelope({ type: "company-pick", conn: "c1", slug: "acme", org: "not an id" }), "c1"), null);
+});

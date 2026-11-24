@@ -109,7 +109,9 @@ from the host; `flow-run`, `flow-stop` from the panel: on a site the extension h
 the panel names it by id and the extension presses its own fixed list of controls in the tab;
 the panel never says what to press), and the site in the tab (`site` from the host: host name,
 title and a small inline icon, as Chrome holds them, so the panel can name the site and offer
-what makes sense there; nothing is read from the page for it). Only the Chrome extension's host speaks it: the shell never
+what makes sense there; nothing is read from the page for it), and the company the chat is in
+(`company` from the host: whether it takes a pick here; `company-pick` from the panel: another
+of the person's companies, by slug and id; extension docs/PLAN.md section 11). Only the Chrome extension's host speaks it: the shell never
 sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
 fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its
 kind (`AI_LOOK_MAX_TEXT_BYTES`, `AI_LOOK_MAX_FILE_BYTES`). Tests: `node --test
