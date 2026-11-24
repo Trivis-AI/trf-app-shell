@@ -114,7 +114,8 @@ what makes sense there; nothing is read from the page for it), and the company t
 of the person's companies, by slug and id; extension docs/PLAN.md section 11). The extension
 has no sign-in of its own (extension DECISIONS.md D41): with no company known it sends `init`
 with an empty slug, and the panel says in `ready` which company it is in, or in `reset` why
-there is none (`signed-out`, `no-company`, `unreachable`). Only the Chrome extension's host speaks it: the shell never
+there is none (`signed-out`, `no-company`, `unreachable`). Its "Sign out" loads the panel's
+sign-out page, which answers `reset` too (`signed-out`, `sign-out-failed`). Only the Chrome extension's host speaks it: the shell never
 sends `look`, so the App panel has no eye. `look-result` carries the read as a Blob beside its
 fields; the bridge's 64 KB bound counts the fields and `parseHostMessage` bounds the Blob by its
 kind (`AI_LOOK_MAX_TEXT_BYTES`, `AI_LOOK_MAX_FILE_BYTES`). Tests: `node --test

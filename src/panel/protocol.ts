@@ -377,6 +377,9 @@ export type AiPanelMessage =
    * The panel cannot go on, and why. `signed-out`: the browser holds no Trivis session, or
    * not one that opens this company. From the Chrome panel's start page also `no-company`
    * (the account has none yet) and `unreachable` (no answer about the person's companies).
+   * From its sign-out page (frontai `/panel/sign-out`, the extension's "Sign out"):
+   * `signed-out` once the browser is signed out of Trivis, `sign-out-failed` when
+   * login-api could not be reached.
    */
   | { type: "reset"; conn: string; reason: string };
 
