@@ -5,16 +5,17 @@ import {
   Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
   Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Circle,
   Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, User,
-  House, Users, Gauge, Warehouse, Landmark,
+  House, Users, Gauge, Warehouse, Landmark, Moon, Sun,
 } from "lucide-react";
 import {
-  Sidebar, SidebarProvider, SidebarInset, SidebarHeader, SidebarContent, SidebarFooter, SidebarMenu,
+  Sidebar, SidebarProvider, SidebarInset, SidebarHeader, SidebarContent, SidebarMenu,
   SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarTrigger, useSidebar,
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   Dialog, DialogContent, DialogTitle,
   Command, CommandInput, CommandList, CommandEmpty, CommandItem,
   Badge, Button, SearchInput, Avatar, Text, cn, OrgSwitcher, OrgTag,
 } from "@trf/ui2";
+import type { OrgSwitcherAction, SidebarColor } from "@trf/ui2";
 import { clearLegacyOrgCookies, useRenewingOrgToken, RefusalDialogs, LowBalanceNote } from "@trf/ui2";
 import { LiveChangesProvider } from "./live/liveChanges";
 import { useAiPanel, AiPanelButton, AiPanelFrame, PanelMenuFit } from "./panel/AiPanel";
@@ -24,7 +25,7 @@ import { fetchDiscoveryMenu, logout } from "@trf/ui";
 import { useThemeFavicon } from "./favicon";
 import { isStagingHost } from "./environment";
 import { useDocumentTitle } from "./title";
-import { useColorMode, usePalette } from "./appearance";
+import { useColorMode, usePalette, type ColorMode } from "./appearance";
 import { useLanguages } from "./languages";
 import { setShellTranslate, shellText } from "./shellText";
 import { ShellCrumbsProvider, useShellCrumbs, useShellBarSlots, useShellBarPinned, useShellBarHidden } from "./crumbs";
@@ -244,6 +245,28 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   "oto ai": Sparkles,
 };
 
+// The colour of a top-level group: its icon, its tree line and the fill of its current
+// page (ui2 sidebar.md, "The grouped menu"). Keyed like ICONS, by the English label
+// lower-cased. A group takes the colour of the area it belongs to in the regrouped menu
+// (docs/plans/sidebar-menu-redesign.md), so today's groups that will merge already share
+// one: CRM, Contacts and Products are Sales' green, Assets, Contracts and Tables are
+// Company's teal. The second block is that menu's own labels, ahead of its data.
+// A label missing here is gray, never uncoloured: a lone plain row would read as disabled.
+const COLORS: Record<string, SidebarColor> = {
+  "my trivis": "magenta", "my account": "magenta", organizations: "magenta",
+  "ai agent": "cyan", ai: "cyan", "oto ai": "cyan",
+  sales: "green", crm: "green", contacts: "green", invoicing: "green", products: "green",
+  purchase: "orange",
+  warehouse: "violet", "assets and warehouse": "violet",
+  payments: "blue",
+  personnel: "purple", people: "purple",
+  assets: "teal", contracts: "teal", tables: "teal", ledger: "teal",
+  reports: "yellow",
+  settings: "gray", audit: "gray",
+
+  "ai tools": "cyan", bank: "blue", payroll: "purple", taxes: "red", company: "teal",
+};
+
 const joinUrl = (base: string, path: string) =>
   `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 
@@ -348,6 +371,8 @@ interface OrgPickerProps {
   onOpen: () => void;
   searchPlaceholder: string;
   emptyText: string;
+  /** Rows under the list: add a company, sign out. */
+  actions: OrgSwitcherAction[];
 }
 
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
@@ -369,8 +394,7 @@ function SidebarBrand({ orgName, appLabel, planLine, lang, ...org }: { orgName: 
       lang={lang}
     />
   );
-  // Single org → nothing to switch to, so the brand is static (no dropdown).
-  if (org.orgs.length <= 1) return <div className="w-full">{inner}</div>;
+  // A dropdown with a single org too: it is where "Add a company" and "Sign out" live.
   return (
     <OrgSwitcher
       orgs={org.orgs}
@@ -380,9 +404,15 @@ function SidebarBrand({ orgName, appLabel, planLine, lang, ...org }: { orgName: 
       orgHref={orgHrefFor}
       searchPlaceholder={org.searchPlaceholder}
       emptyText={org.emptyText}
-      // Open 4px into the header: just under the inset hover block, and over the top
-      // edge of the menu search, which starts right where the header ends.
-      sideOffset={-4}
+      actions={org.actions}
+      // 3px up into the header and 7px right: the panel's search icon and text then sit
+      // exactly on the menu search's own (ui2 org-switcher.md, alignOffset), so opening the
+      // switcher reads as the same field asking a different question.
+      sideOffset={-3}
+      alignOffset={7}
+      // The rail sits on the window's left edge, and the default 8px the panel keeps from
+      // an edge would push it back from 7 to 8.
+      collisionPadding={{ top: 8, right: 8, bottom: 8, left: 7 }}
     >
       {/* The hover is a rounded block inset 8px from the button's edges; the button
           itself keeps the header's full size. */}
@@ -508,6 +538,7 @@ function MobileBar({
             orgHref={orgHrefFor}
             searchPlaceholder={org.searchPlaceholder}
             emptyText={org.emptyText}
+            actions={org.actions}
           >
             <button type="button" className="min-w-0 truncate font-medium outline-none hover:opacity-80">
               {orgName ?? "TRF"}
@@ -738,8 +769,13 @@ function LanguageSelect({ translation }: { translation: TranslationLike }) {
   );
 }
 
-function LogoutButton({ loginUrl }: { loginUrl: string }) {
+// Light or dark, one press. "system" (picked under User settings, Appearance) becomes an
+// explicit choice here: the button shows what the page looks like now and switches to the
+// other. Folds away on the collapsed rail, like the language button.
+function ThemeButton({ mode, setMode }: { mode: ColorMode; setMode: (m: ColorMode) => void }) {
   const { collapsed } = useSidebar();
+  const dark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const next = dark ? shellText("<trn-mode-light>", "Light") : shellText("<trn-mode-dark>", "Dark");
   return (
     <div
       className={cn(
@@ -751,13 +787,49 @@ function LogoutButton({ loginUrl }: { loginUrl: string }) {
         type="button"
         variant="ghost"
         size="icon"
-        onClick={() => logout(loginUrl)}
-        aria-label={shellText("<trn-shell-sign-out>", "Sign out")}
-        title={shellText("<trn-shell-sign-out>", "Sign out")}
+        onClick={() => setMode(dark ? "light" : "dark")}
+        aria-label={next}
+        title={next}
         className="size-8 text-muted-foreground hover:text-foreground max-md:size-10 max-md:[&_svg]:size-5"
       >
-        <LogOut />
+        {dark ? <Sun /> : <Moon />}
       </Button>
+    </div>
+  );
+}
+
+// Phone only. On desktop "Sign out" is a row of the org switcher; on a phone that switcher
+// is a tap on the org name in the top bar, too hidden to be the only way out.
+function LogoutButton({ loginUrl }: { loginUrl: string }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={() => logout(loginUrl)}
+      aria-label={shellText("<trn-shell-sign-out>", "Sign out")}
+      title={shellText("<trn-shell-sign-out>", "Sign out")}
+      className="size-10 text-muted-foreground hover:text-foreground md:hidden [&_svg]:size-5"
+    >
+      <LogOut />
+    </Button>
+  );
+}
+
+// The last row of the menu's scrolling column, not a fixed footer: light/dark and language
+// on the left, collapse on the right. mt-auto rests it on the bottom of the rail while the
+// menu is shorter than the rail; a taller menu pushes it down and it scrolls away with the
+// rest. On the collapsed rail only the trigger is left, centred on the icons' line; no gap
+// between the buttons, because the folded ones would still count theirs and push it off.
+function MenuBottomRow({
+  translation, loginUrl, mode, setMode,
+}: { translation: TranslationLike; loginUrl: string; mode: ColorMode; setMode: (m: ColorMode) => void }) {
+  return (
+    <div className="mt-auto flex shrink-0 items-center px-2 pt-2 max-md:min-h-14 max-md:justify-around max-md:px-3">
+      <ThemeButton mode={mode} setMode={setMode} />
+      <LanguageSelect translation={translation} />
+      <LogoutButton loginUrl={loginUrl} />
+      <SidebarTrigger />
     </div>
   );
 }
@@ -777,7 +849,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // Apply and store the palette and light/dark; both are picked in User settings › Appearance.
   // The values are forwarded to the AI panel, whose document cannot see the in-page change.
   const [palette] = usePalette();
-  const [colorMode] = useColorMode();
+  const [colorMode, setColorMode] = useColorMode();
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
   const [planLine, setPlanLine] = useState<PlanLine | null>(null);
   const planFetchedAt = useRef(0);
@@ -1016,10 +1088,18 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     ? (sectionPath.length > 2 ? [sectionPath[0], sectionPath[sectionPath.length - 1]] : sectionPath).map(label)
     : [appLabel];
 
-  // Auto-open the active route's group(s) once the menu has loaded / the route changes.
+  // Open the active route's branch once the menu has loaded and on every navigation. The
+  // menu is an accordion (one open group per level), so the branch replaces what was open
+  // instead of adding to it. A menu reload on the same route changes nothing: a group the
+  // person opened to look around stays open until they go somewhere.
+  const openedFor = useRef("");
   useEffect(() => {
     const active = activeGroupIds(items);
-    if (active.length) setOpenGroups((prev) => Array.from(new Set([...prev, ...active])));
+    if (!active.length) return;
+    const signature = `${location.pathname}|${active.join("/")}`;
+    if (signature === openedFor.current) return;
+    openedFor.current = signature;
+    setOpenGroups(active);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, baseUrls, location.pathname]);
 
@@ -1125,9 +1205,11 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   };
 
   // Recursive nav node: a group (with children) recurses into SidebarMenuSub; a leaf
-  // navigates. Only top-level rows carry a domain icon (matches the existing look).
+  // navigates. Only top-level rows carry a domain icon and a colour; the rows under a
+  // group inherit its colour.
   const renderNode = (item: MenuItem, top: boolean): React.ReactNode => {
     const Icon = top ? (ICONS[item.label.toLowerCase()] ?? Circle) : undefined;
+    const color = top ? (COLORS[item.label.toLowerCase()] ?? "gray") : undefined;
     // A group holding a single leaf adds a needless level (e.g. "Products › Product
     // Settings"): collapse it to one row — keep the category label/icon, navigate to
     // the lone child.
@@ -1137,8 +1219,9 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
         : null;
     if (!collapsed && item.children?.length) {
       return (
-        <SidebarMenuItem key={item.id}>
-          <SidebarMenuButton groupId={item.id} icon={Icon ? <Icon /> : undefined} tooltip={item.label}>
+        <SidebarMenuItem key={item.id} color={color}>
+          {/* hasActive: closed, the group stands in for its current page (tinted). */}
+          <SidebarMenuButton groupId={item.id} icon={Icon ? <Icon /> : undefined} tooltip={item.label} hasActive={hasActiveChild(item)}>
             {label(item)}
           </SidebarMenuButton>
           <SidebarMenuSub groupId={item.id}>
@@ -1151,7 +1234,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     const ctx = resolve(node);
     const action = itemAction?.(node, ctx) ?? aiChatAction(node, ctx);
     return (
-      <SidebarMenuItem key={node.id} className={action ? "group/item relative" : undefined}>
+      <SidebarMenuItem key={node.id} color={color} className={action ? "group/item relative" : undefined}>
         <SidebarMenuButton
           icon={Icon ? <Icon /> : undefined}
           tooltip={node.label}
@@ -1173,6 +1256,26 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     onOpen: refreshOrgs,
     searchPlaceholder: orgSwitcherTexts.search,
     emptyText: orgSwitcherTexts.empty,
+    actions: [
+      {
+        id: "add-company",
+        label: shellText("<trn-add-company>", "Add a company"),
+        icon: <Plus />,
+        // The portal's own page; inside the portal it is a route change, not a reload.
+        onSelect: () => {
+          const path = slug ? `/app/${slug}/manage-organization/new` : "/app/new-organization";
+          if (appId === "login") navigate(path);
+          else window.location.href = joinUrl(portalBase, path);
+        },
+      },
+      {
+        id: "sign-out",
+        label: shellText("<trn-shell-sign-out>", "Sign out"),
+        icon: <LogOut />,
+        destructive: true,
+        onSelect: () => logout(portalBase),
+      },
+    ],
   };
 
   const sidebar = (
@@ -1190,7 +1293,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
         <SidebarBrand orgName={orgName} appLabel={appLabel} planLine={planLine} lang={lang} {...orgProps} />
       </SidebarHeader>
       {/* No top padding: the search sits right under the brand header. */}
-      <SidebarContent className="pt-0" onScroll={(e) => setMenuScrolled(e.currentTarget.scrollTop > 0)}>
+      {/* A flex column so the bottom row (MenuBottomRow) can rest on the rail's bottom. */}
+      <SidebarContent className="flex flex-col pt-0" onScroll={(e) => setMenuScrolled(e.currentTarget.scrollTop > 0)}>
         {/* Owners/admins below low_balance_warning: one quiet line (decision 51). */}
         {slug && appId !== "login" && <LowBalanceLine slug={slug} />}
         <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} />
@@ -1231,12 +1335,8 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
             {items.map((item) => renderNode(item, true))}
           </SidebarMenu>
         )}
+        <MenuBottomRow translation={translation} loginUrl={portalBase} mode={colorMode} setMode={setColorMode} />
       </SidebarContent>
-      <SidebarFooter className="max-md:min-h-14 max-md:justify-around max-md:px-3">
-        <LanguageSelect translation={translation} />
-        <LogoutButton loginUrl={portalBase} />
-        <SidebarTrigger />
-      </SidebarFooter>
     </Sidebar>
   );
 
@@ -1249,7 +1349,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       {/* ui2's AppShell frame, spelled out so the AI panel can sit beside the page as a
           sibling of the inset: sidebar, page, panel in one row. The panel pushes the page;
           in big chat the page keeps its state at zero width. */}
-      <SidebarProvider openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
+      <SidebarProvider accordion openGroups={openGroups} onOpenGroupsChange={setOpenGroups}>
         <PanelMenuFit ai={ai} />
         <div className="flex h-dvh w-full overflow-hidden">
           {sidebar}
