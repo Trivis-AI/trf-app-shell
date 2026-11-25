@@ -165,6 +165,20 @@ function MenuSearchBox({
   onKeyDown?: (e: React.KeyboardEvent) => void;
 }) {
   const { collapsed } = useSidebar();
+  const inputRef = useRef<HTMLInputElement>(null);
+  // The search has the cursor when a page loads, so a person can type a destination
+  // straight away. Once per load, not per route. Skipped where it would get in the way:
+  // on a phone or a touch screen (it would raise the keyboard), on the folded rail and in
+  // the closed drawer's copy (no visible field), and when the page already put the cursor
+  // somewhere (a form's own first field wins).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || el.offsetParent === null) return;
+    if (!window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
+    const focused = document.activeElement;
+    if (focused && focused !== document.body) return;
+    el.focus({ preventScroll: true });
+  }, []);
   if (collapsed) {
     return (
       <div className="flex justify-center px-2 pb-1">
@@ -185,6 +199,7 @@ function MenuSearchBox({
   return (
     <div className="px-2 pb-1 max-md:px-1">
       <SearchInput
+        ref={inputRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onClear={() => setQuery("")}
