@@ -157,28 +157,31 @@ function Highlight({ text, query }: { text: string; query: string }) {
 /** Inline filter box at the top of the menu. On the collapsed rail it becomes a
  * single search icon button that opens the ⌘K palette (no room for an input). */
 function MenuSearchBox({
-  query, setQuery, onOpenPalette, onKeyDown,
+  query, setQuery, onOpenPalette, onKeyDown, focusSignal,
 }: {
   query: string;
   setQuery: (v: string) => void;
   onOpenPalette: () => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  /** 0 on load; the layout raises it to put the cursor here again (an organisation was picked). */
+  focusSignal: number;
 }) {
   const { collapsed } = useSidebar();
   const inputRef = useRef<HTMLInputElement>(null);
-  // The search has the cursor when a page loads, so a person can type a destination
-  // straight away. Once per load, not per route. Skipped where it would get in the way:
-  // on a phone or a touch screen (it would raise the keyboard), on the folded rail and in
-  // the closed drawer's copy (no visible field), and when the page already put the cursor
-  // somewhere (a form's own first field wins).
+  // The search has the cursor when a page loads and again once an organisation was picked
+  // (that is a route change, not a load), so a person can type a destination straight away.
+  // Not on every route. Skipped where it would get in the way: on a phone or a touch screen
+  // (it would raise the keyboard), on the folded rail and in the closed drawer's copy (no
+  // visible field), and on load when the page already put the cursor somewhere (a form's own
+  // first field wins). After a pick the cursor sits on the org button, so there it is taken.
   useEffect(() => {
     const el = inputRef.current;
     if (!el || el.offsetParent === null) return;
     if (!window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
     const focused = document.activeElement;
-    if (focused && focused !== document.body) return;
+    if (focusSignal === 0 && focused && focused !== document.body) return;
     el.focus({ preventScroll: true });
-  }, []);
+  }, [focusSignal]);
   if (collapsed) {
     return (
       <div className="flex justify-center px-2 pb-1">
@@ -388,6 +391,8 @@ interface OrgPickerProps {
   emptyText: string;
   /** Rows under the list: add a company, sign out. */
   actions: OrgSwitcherAction[];
+  /** The dropdown has closed and the cursor is back on the org button. */
+  onCloseAutoFocus: () => void;
 }
 
 // Desktop brand header — the whole block is the org-picker trigger (no chevron;
@@ -420,6 +425,7 @@ function SidebarBrand({ orgName, appLabel, planLine, lang, ...org }: { orgName: 
       searchPlaceholder={org.searchPlaceholder}
       emptyText={org.emptyText}
       actions={org.actions}
+      onCloseAutoFocus={org.onCloseAutoFocus}
       // 3px up into the header and 7px right: the panel's search icon and text then sit
       // exactly on the menu search's own (ui2 org-switcher.md, alignOffset), so opening the
       // switcher reads as the same field asking a different question.
@@ -554,6 +560,7 @@ function MobileBar({
             searchPlaceholder={org.searchPlaceholder}
             emptyText={org.emptyText}
             actions={org.actions}
+            onCloseAutoFocus={org.onCloseAutoFocus}
           >
             <button type="button" className="min-w-0 truncate font-medium outline-none hover:opacity-80">
               {orgName ?? "TRF"}
@@ -1107,6 +1114,13 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   // menu is an accordion (one open group per level), so the branch replaces what was open
   // instead of adding to it. A menu reload on the same route changes nothing: a group the
   // person opened to look around stays open until they go somewhere.
+  // Picking an organisation hands the cursor to the menu search, as a page load does. The
+  // pick is remembered until the dropdown has closed and Radix has put the cursor back on the
+  // org button; only then is it moved, or Radix would take it straight back. Closing the
+  // dropdown any other way (Escape, the same org, an action) leaves the cursor where it was.
+  const orgPicked = useRef(false);
+  const [searchFocus, setSearchFocus] = useState(0);
+
   const openedFor = useRef("");
   useEffect(() => {
     const active = activeGroupIds(items);
@@ -1267,8 +1281,13 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
   const orgProps: OrgPickerProps = {
     orgs,
     currentSlug: slug,
-    onSelect: (s) => navigate(`/app/${s}`),
+    onSelect: (s) => { orgPicked.current = true; navigate(`/app/${s}`); },
     onOpen: refreshOrgs,
+    onCloseAutoFocus: () => {
+      if (!orgPicked.current) return;
+      orgPicked.current = false;
+      setSearchFocus((n) => n + 1);
+    },
     searchPlaceholder: orgSwitcherTexts.search,
     emptyText: orgSwitcherTexts.empty,
     actions: [
@@ -1312,7 +1331,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       <SidebarContent className="flex flex-col pt-0" onScroll={(e) => setMenuScrolled(e.currentTarget.scrollTop > 0)}>
         {/* Owners/admins below low_balance_warning: one quiet line (decision 51). */}
         {slug && appId !== "login" && <LowBalanceLine slug={slug} />}
-        <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} />
+        <MenuSearchBox query={query} setQuery={setQuery} onOpenPalette={() => setPaletteOpen(true)} onKeyDown={onSearchKeyDown} focusSignal={searchFocus} />
         {query.trim() ? (
           <div ref={resultsRef}>
             <SidebarMenu>
