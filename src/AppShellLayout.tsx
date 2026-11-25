@@ -5,7 +5,7 @@ import {
   Sparkles, BadgeDollarSign, Receipt, ReceiptText, Wallet, Package, ScrollText, PieChart, Handshake,
   Signature, CirclePile, Table2, Settings, ClipboardCheck, Network, Circle,
   Plus, LogOut, ChevronRight, ChevronsUpDown, Check, Globe, Menu, X, Search, User,
-  House, Users, Gauge, Warehouse, Landmark, Moon, Sun,
+  House, Users, Gauge, Warehouse, Landmark, Moon, Sun, Bot, Banknote, Percent, Building2,
 } from "lucide-react";
 import {
   Sidebar, SidebarProvider, SidebarInset, SidebarHeader, SidebarContent, SidebarMenu,
@@ -261,6 +261,10 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   audit: ClipboardCheck, organizations: Network, "my account": User, "my trivis": House,
   // "Oto AI" is the pre-2026-10-04 label of the AI group, now "AI Agent"; same reason.
   "oto ai": Sparkles,
+  // The regrouped menu (services, 2026-11): AI Agent became AI Tools, Payments became Bank,
+  // People became Payroll, and Taxes and Company are new. The old labels above stay for
+  // cached menus and for the weeks staging and prod serve different menus.
+  "ai tools": Bot, bank: Landmark, payroll: Banknote, taxes: Percent, company: Building2,
 };
 
 // The colour of a top-level group: its icon, its tree line and the fill of its current
