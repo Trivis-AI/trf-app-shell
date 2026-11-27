@@ -209,7 +209,11 @@ function MenuSearchBox({
         onKeyDown={onKeyDown}
         placeholder={shellText("<trn-search>", "Search…")}
         aria-label={shellText("<trn-shell-search-menu>", "Search menu")}
-        className="h-9 bg-sidebar-field focus-visible:bg-sidebar-field-focus max-md:h-11 max-md:text-base"
+        // The focus ring is drawn inside the field. The field sits flush under the brand row,
+        // at the top edge of the scrolling menu, which clips anything drawn above it: the
+        // usual outside ring lost its top side there (plain to see in a theme with a
+        // coloured ring).
+        className="h-9 bg-sidebar-field focus-visible:bg-sidebar-field-focus focus-visible:ring-inset focus-visible:ring-offset-0 max-md:h-11 max-md:text-base"
       />
     </div>
   );
@@ -1049,10 +1053,31 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
     }
   };
 
-  const isActive = (item: MenuItem): boolean => {
+  // The URL sits at or below this item's address. Several rows can say so at once:
+  // on /items/new both "Items" (/items) and "New Item" (/items/new) do.
+  const underUrl = (item: MenuItem): boolean => {
     const { href, internal } = resolve(item);
     if (!internal || !href) return false;
     return location.pathname === href || location.pathname.startsWith(href + "/");
+  };
+  // The one row marked in the sidebar is the deepest of those, so "New Item" is
+  // marked on /items/new and "Items" is not. The breadcrumb and the tab title keep
+  // the first match (underUrl): there the list is the section and the page names itself.
+  const activeHref = (() => {
+    let best = "";
+    const walk = (nodes: MenuItem[]) => {
+      for (const n of nodes) {
+        const href = underUrl(n) ? resolve(n).href ?? "" : "";
+        if (href.length > best.length) best = href;
+        if (n.children?.length) walk(n.children);
+      }
+    };
+    walk(items);
+    return best;
+  })();
+  const isActive = (item: MenuItem): boolean => {
+    const { href, internal } = resolve(item);
+    return internal && !!href && href === activeHref;
   };
   const hasActiveChild = (item: MenuItem): boolean =>
     !!item.children?.some((c) => isActive(c) || hasActiveChild(c));
@@ -1075,7 +1100,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
       if (n.children?.length) {
         const sub = activeSectionLeaf(n.children);
         if (sub) return sub;
-      } else if (isActive(n)) {
+      } else if (underUrl(n)) {
         return n;
       }
     }
@@ -1096,7 +1121,7 @@ export function AppShellLayout({ appId, appLabel, translation, loginUrl, orgsApi
         const collapsed = n.children.length === 1 && !n.children[0].children?.length;
         return collapsed ? [n] : [n, ...sub];
       }
-      if (isActive(n)) return [n];
+      if (underUrl(n)) return [n];
     }
     return null;
   };
